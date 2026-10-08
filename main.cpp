@@ -91,12 +91,30 @@ void applyDrag(){if(!drag.active||selected<0)return;auto& o=objects[selected];
  }
 }
 
+const char* connectionPrompt =
+"COREMODEL_AI_REQUEST\n"
+"protocol=1\n"
+"action=connect\n"
+"source=CoreModel\n"
+"repository=https://github.com/3dmk/3dit\n"
+"branch=main\n"
+"workflow=GitHub\n"
+"local_path=C:\\GPT\\CoreModel_GitHub\n"
+"authority=candidate-only\n"
+"\n"
+"Connect to the CoreModel C++23/raylib editor project using its GitHub repository. "
+"Read the current repository source before making changes. Treat all AI edits as "
+"candidate changes until built and validated on the user's PC. Preserve the "
+"previous known-good build. Implement requested changes in the GitHub source, "
+"then tell me to double-click Update-and-Launch.cmd to pull, build, and launch. "
+"Do not claim direct live access to my local editor or files.\n";
+
 int main(){SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);InitWindow(1280,760,"CoreModel Native v0.8 - C++23");SetTargetFPS(60);camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
-while(!WindowShouldClose()){int w=GetScreenWidth(),h=GetScreenHeight();Rectangle left={0,42,185,(float)h-68},right={(float)w-230,42,230,(float)h-68};bool inView=GetMouseX()>185&&GetMouseX()<w-230&&GetMouseY()>42&&GetMouseY()<h-26;
+int connectFeedback=0;while(!WindowShouldClose()){if(connectFeedback>0)connectFeedback--;int w=GetScreenWidth(),h=GetScreenHeight();Rectangle left={0,42,185,(float)h-68},right={(float)w-230,42,230,(float)h-68};bool inView=GetMouseX()>185&&GetMouseX()<w-230&&GetMouseY()>42&&GetMouseY()<h-26;
 if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Z)){if(IsKeyDown(KEY_LEFT_SHIFT))redo();else undo();}if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Y))redo();
 if(IsKeyPressed(KEY_ONE)){mode=1;sub=-1;}if(IsKeyPressed(KEY_TWO)){mode=2;sub=-1;}if(IsKeyPressed(KEY_THREE)){mode=3;sub=-1;}if(IsKeyPressed(KEY_ZERO)){mode=0;sub=-1;}
 if(IsKeyPressed(KEY_W)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=1;if(IsKeyPressed(KEY_E)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=2;if(IsKeyPressed(KEY_R)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=3;
-if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){Vector2 m=GetMousePosition();if(m.x<185&&m.y>65){int row=(int)((m.y-75)/39);if(row>=0&&row<=2){checkpoint();objects.push_back(row==0?box():row==1?sphere():plane());selected=(int)objects.size()-1;face=-1;}else if(row==4)extrude();else if(row==5)inset();}else if(inView){int axis=handleHit(m);if(axis>=0)startDrag(axis);else if(mode==0){pick(m);sub=-1;}else pickComponent(m);}}
+if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){Vector2 m=GetMousePosition();if(m.y>=7&&m.y<36&&m.x>=w-190&&m.x<w-12){SetClipboardText(connectionPrompt);connectFeedback=180;}else if(m.x<185&&m.y>65){int row=(int)((m.y-75)/39);if(row>=0&&row<=2){checkpoint();objects.push_back(row==0?box():row==1?sphere():plane());selected=(int)objects.size()-1;face=-1;}else if(row==4)extrude();else if(row==5)inset();}else if(inView){int axis=handleHit(m);if(axis>=0)startDrag(axis);else if(mode==0){pick(m);sub=-1;}else pickComponent(m);}}
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
 if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)){
  Vector2 d=GetMouseDelta();Vector3 offset=Vector3Subtract(camera.position,camera.target);
@@ -142,4 +160,4 @@ DrawLine3D({0,0,0},{2,0,0},RED);DrawLine3D({0,0,0},{0,2,0},GREEN);
 for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=oi==selected&&fi==face&&mode==3?ORANGE:Color{87,105,124,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),oi==selected?GOLD:LIGHTGRAY);}if(oi==selected){Vector3 p=pivot(o);DrawLine3D(p,Vector3Add(p,{1.6f,0,0}),RED);DrawLine3D(p,Vector3Add(p,{0,1.6f,0}),GREEN);DrawLine3D(p,Vector3Add(p,{0,0,1.6f}),BLUE);if(mode==1)for(int i=0;i<(int)o.vertices.size();i++)DrawSphere(world(o,i),.055f,i==sub?ORANGE:YELLOW);
  if(mode==2){auto e=edges(o);if(sub>=0&&sub<(int)e.size())DrawLine3D(world(o,e[sub].first),world(o,e[sub].second),ORANGE);}
  DrawSphere(Vector3Add(p,{1.35f,0,0}),.09f,RED);DrawSphere(Vector3Add(p,{0,1.35f,0}),.09f,GREEN);DrawSphere(Vector3Add(p,{0,0,1.35f}),.09f,BLUE);}}
-EndMode3D();DrawRectangle(0,0,w,42,{37,41,49,255});DrawText("CoreModel Native v0.8  |  C++23  |  Object: 0  Vertex: 1  Edge: 2  Face: 3",12,13,17,RAYWHITE);DrawRectangleRec(left,{34,38,45,255});DrawRectangleRec(right,{34,38,45,255});const char* labels[]={"ADD BOX","ADD SPHERE","ADD PLANE","","EXTRUDE FACE","INSET FACE"};for(int i=0;i<6;i++)DrawText(labels[i],15,80+i*39,16,i==3?GRAY:RAYWHITE);DrawText("PROPERTIES",w-215,65,18,RAYWHITE);DrawText(TextFormat("Tool: %s",tool==1?"MOVE":tool==2?"ROTATE":"SCALE"),w-215,88,14,LIGHTGRAY);if(selected>=0){auto&o=objects[selected];DrawText(o.name.c_str(),w-215,104,19,GOLD);DrawText(TextFormat("Vertices: %i",(int)o.vertices.size()),w-215,146,16,RAYWHITE);DrawText(TextFormat("Faces: %i",(int)o.faces.size()),w-215,174,16,RAYWHITE);DrawText(TextFormat("Position: %.2f %.2f %.2f",o.position.x,o.position.y,o.position.z),w-215,210,14,RAYWHITE);}DrawRectangle(0,h-26,w,26,{35,39,46,255});DrawText("RMB orbit + WASD/QE fly | MMB pan | Wheel zoom | F frame | Numpad 1/3/7 views | W/E/R tools | Ctrl+Z/Y",10,h-20,13,LIGHTGRAY);EndDrawing();}CloseWindow();}
+EndMode3D();DrawRectangle(0,0,w,42,{37,41,49,255});DrawText("CoreModel Native v0.8  |  C++23  |  Object: 0  Vertex: 1  Edge: 2  Face: 3",12,13,17,RAYWHITE);DrawRectangle(w-190,7,178,29,connectFeedback>0?Color{40,110,76,255}:Color{58,85,118,255});DrawRectangleLines(w-190,7,178,29,Color{115,142,171,255});DrawText(connectFeedback>0?"COPIED TO CLIPBOARD":"COPY AI CONNECT",w-182,15,14,RAYWHITE);DrawRectangleRec(left,{34,38,45,255});DrawRectangleRec(right,{34,38,45,255});const char* labels[]={"ADD BOX","ADD SPHERE","ADD PLANE","","EXTRUDE FACE","INSET FACE"};for(int i=0;i<6;i++)DrawText(labels[i],15,80+i*39,16,i==3?GRAY:RAYWHITE);DrawText("PROPERTIES",w-215,65,18,RAYWHITE);DrawText(TextFormat("Tool: %s",tool==1?"MOVE":tool==2?"ROTATE":"SCALE"),w-215,88,14,LIGHTGRAY);if(selected>=0){auto&o=objects[selected];DrawText(o.name.c_str(),w-215,104,19,GOLD);DrawText(TextFormat("Vertices: %i",(int)o.vertices.size()),w-215,146,16,RAYWHITE);DrawText(TextFormat("Faces: %i",(int)o.faces.size()),w-215,174,16,RAYWHITE);DrawText(TextFormat("Position: %.2f %.2f %.2f",o.position.x,o.position.y,o.position.z),w-215,210,14,RAYWHITE);}DrawRectangle(0,h-26,w,26,{35,39,46,255});DrawText("RMB orbit + WASD/QE fly | MMB pan | Wheel zoom | F frame | Numpad 1/3/7 views | W/E/R tools | Ctrl+Z/Y",10,h-20,13,LIGHTGRAY);EndDrawing();}CloseWindow();}
