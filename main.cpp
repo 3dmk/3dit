@@ -333,7 +333,7 @@ bool rectangleContains(Vector2 p){
 void selectRectangle(){
  if(selected<0||selected>=(int)objects.size()||mode==0)return;
  auto& o=objects[selected];
- if(!IsKeyDown(KEY_LEFT_CONTROL)&&!IsKeyDown(KEY_RIGHT_CONTROL))rectangleSelected.clear();
+ if(rectangleObject!=selected||(!IsKeyDown(KEY_LEFT_CONTROL)&&!IsKeyDown(KEY_RIGHT_CONTROL))rectangleSelected.clear();
  rectangleObject=selected;
  if(mode==1){for(int i=0;i<(int)o.vertices.size();i++)if(rectangleContains(GetWorldToScreen(world(o,i),camera)))rectangleSelected.insert(i);}
  if(mode==2||mode==4){
@@ -553,7 +553,20 @@ if(rectanglePending&&IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
 }
 if(rectanglePending&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){
  if(rectangleDragging)selectRectangle();
- else{pickComponent(rectangleEnd);rectangleSelected.clear();rectangleObject=selected;}
+ else{
+  const bool ctrl=IsKeyDown(KEY_LEFT_CONTROL)||IsKeyDown(KEY_RIGHT_CONTROL);
+  pickComponent(rectangleEnd);
+  int hit=(mode==3)?face:sub;
+  if(rectangleObject!=selected)rectangleSelected.clear();
+  rectangleObject=selected;
+  if(!ctrl)rectangleSelected.clear();
+  if(hit>=0){
+   if(ctrl&&rectangleSelected.count(hit))rectangleSelected.erase(hit);
+   else rectangleSelected.insert(hit);
+  }
+  sub=-1;face=-1;
+  if(rectangleSelected.size()==1){if(mode==3)face=*rectangleSelected.begin();else sub=*rectangleSelected.begin();}
+ }
  rectanglePending=false;rectangleDragging=false;
 }
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
