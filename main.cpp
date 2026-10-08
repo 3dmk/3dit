@@ -266,6 +266,29 @@ void selectBoundaryLoop(){
  // the detected loop length rather than falsely implying multi-selection.
 }
 
+
+bool targetWeldArmed=false;
+int targetWeldSource=-1,targetWeldObject=-1;
+void armTargetWeld(){
+ if(mode!=1||!validComponent())return;
+ const auto& o=objects[selected];
+ if(sub<0||sub>=(int)o.vertices.size())return;
+ targetWeldArmed=true;targetWeldSource=sub;targetWeldObject=selected;
+}
+void applyTargetWeld(int destination){
+ if(!targetWeldArmed)return;
+ targetWeldArmed=false;
+ if(mode!=1||selected!=targetWeldObject||!validComponent())return;
+ auto& o=objects[selected];
+ if(destination<0||destination>=(int)o.vertices.size()||targetWeldSource<0||targetWeldSource>=(int)o.vertices.size()||destination==targetWeldSource)return;
+ checkpoint();const int source=targetWeldSource;
+ for(auto& f:o.faces)for(int& v:f)if(v==source)v=destination;
+ o.faces.erase(std::remove_if(o.faces.begin(),o.faces.end(),[](const std::vector<int>& f){
+  std::set<int> unique(f.begin(),f.end());return unique.size()<3;
+ }),o.faces.end());
+ compactVertices(o);sub=-1;face=-1;
+}
+
 void pick(Vector2 mouse){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int best=-1,bf=-1;for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!hit.hit)hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(hit.hit&&hit.distance<nearest){nearest=hit.distance;best=oi;bf=fi;}}}}selected=best;face=bf;}
 
 std::vector<std::pair<int,int>> edges(const MeshObject& o){
@@ -325,7 +348,7 @@ void pickComponent(Vector2 mouse){
  }}
  else if(mode==2||mode==4){auto e=edges(o);for(int i=0;i<(int)e.size();i++){
   float d=segmentDistance(mouse,GetWorldToScreen(world(o,e[i].first),camera),GetWorldToScreen(world(o,e[i].second),camera));
-  if(d<best){best=d;sub=i;}
+  if(d<best){if(mode==4){auto bounds=boundaryEdges(o);if(std::find(bounds.begin(),bounds.end(),e[i])==bounds.end())continue;}best=d;sub=i;}
  }}
  // Permit selecting vertices and edges even on the visible silhouette.
  if(sub<0&&prior>=0&&prior<(int)objects.size()){
@@ -336,7 +359,7 @@ void pickComponent(Vector2 mouse){
   }
   if(mode==2||mode==4){auto e=edges(old);for(int i=0;i<(int)e.size();i++){
    float d=segmentDistance(mouse,GetWorldToScreen(world(old,e[i].first),camera),GetWorldToScreen(world(old,e[i].second),camera));
-   if(d<distance){distance=d;selected=prior;sub=i;}
+   if(d<distance){if(mode==4){auto bounds=boundaryEdges(old);if(std::find(bounds.begin(),bounds.end(),e[i])==bounds.end())continue;}distance=d;selected=prior;sub=i;}
   }}
  }
  face=-1;
@@ -465,7 +488,7 @@ while(!WindowShouldClose()){
   int axis=handleHit(m);
   if(axis>=0)startDrag(axis);
   else if(mode==0){pick(m);sub=-1;}
-  else pickComponent(m);
+  else {pickComponent(m);if(targetWeldArmed){if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}}
  }
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
 if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)){
@@ -667,7 +690,7 @@ if(ImGui::Begin("Editable Polygon")){
  ImGui::TextUnformatted("Selection mode");
  const char* names[]={"Object","Vertex","Edge","Border","Polygon"};
  const int subModes[]={0,1,2,4,3};
- for(int i=0;i<5;i++){if(i==3)ImGui::NewLine();else if(i)ImGui::SameLine();if(ImGui::RadioButton(names[i],mode==subModes[i])){mode=subModes[i];sub=-1;face=-1;}}
+ for(int i=0;i<5;i++){if(i==3)ImGui::NewLine();else if(i)ImGui::SameLine();if(ImGui::RadioButton(names[i],mode==subModes[i])){mode=subModes[i];sub=-1;face=-1;targetWeldArmed=false;}}
  ImGui::Separator();
  auto operation=[&](const char* label,bool available,void(*fn)()){
   ImGui::BeginDisabled(!available);
@@ -685,7 +708,8 @@ if(ImGui::Begin("Editable Polygon")){
   operation("Break Vertex",vertex,breakSelectedVertex);
   operation("Extrude Vertex (Z+)",vertex,extrudeSelectedVertex);
   operation("Chamfer Vertex",vertex,chamferSelectedVertex);
-  ImGui::BeginDisabled();ImGui::Button("Target Weld",ImVec2(-1,0));ImGui::EndDisabled();
+  operation("Target Weld (click destination)",vertex,armTargetWeld);
+  if(targetWeldArmed)ImGui::TextColored(ImVec4(1.0f,.8f,.3f,1.0f),"Click the destination vertex in the viewport");
  }
  if(mode==2&&ImGui::CollapsingHeader("Edge###EdgeToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Split Edge",edge,splitSelectedEdge);
