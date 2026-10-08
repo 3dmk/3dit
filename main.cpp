@@ -18,7 +18,7 @@ MeshObject sphere(){MeshObject o;o.name="Sphere";constexpr int N=16,R=10;for(int
 Vector3 world(const MeshObject&o,int i){return Vector3Add(o.vertices[i],o.position);}
 void extrude(){if(selected<0||face<0||mode!=3)return;checkpoint();auto&o=objects[selected];auto old=o.faces[face];if(old.size()<3)return;Vector3 a=o.vertices[old[0]],b=o.vertices[old[1]],c=o.vertices[old[2]];Vector3 n=Vector3Normalize(Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a)));std::vector<int> top;for(int i:old){top.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Add(o.vertices[i],Vector3Scale(n,.5f)));}o.faces[face]=top;for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],top[(i+1)%top.size()],top[i]});}
 void inset(){if(selected<0||face<0||mode!=3)return;checkpoint();auto&o=objects[selected];auto old=o.faces[face];Vector3 c{};for(int i:old)c=Vector3Add(c,o.vertices[i]);c=Vector3Scale(c,1.0f/old.size());std::vector<int> inner;for(int i:old){inner.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Lerp(c,o.vertices[i],.7f));}o.faces[face]=inner;for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],inner[(i+1)%inner.size()],inner[i]});}
-void pick(Vector2 mouse){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int best=-1,bf=-1;for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(hit.hit&&hit.distance<nearest){nearest=hit.distance;best=oi;bf=fi;}}}}selected=best;face=bf;}
+void pick(Vector2 mouse){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int best=-1,bf=-1;for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!hit.hit)hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(hit.hit&&hit.distance<nearest){nearest=hit.distance;best=oi;bf=fi;}}}}selected=best;face=bf;}
 
 std::vector<std::pair<int,int>> edges(const MeshObject& o){
  std::set<std::pair<int,int>> e;
@@ -38,22 +38,41 @@ Vector3 pivot(const MeshObject& o){auto a=active(o);if(a.empty())return o.positi
 float segmentDistance(Vector2 p,Vector2 a,Vector2 b){Vector2 d=Vector2Subtract(b,a),v=Vector2Subtract(p,a);
  float t=std::clamp(Vector2DotProduct(v,d)/std::max(1.0f,Vector2DotProduct(d,d)),0.0f,1.0f);
  return Vector2Distance(p,Vector2Add(a,Vector2Scale(d,t)));}
-int handleHit(Vector2 mouse){if(selected<0)return -1;Vector3 p=pivot(objects[selected]);
+int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode!=0&&active(objects[selected]).empty()))return -1;Vector3 p=pivot(objects[selected]);
  Vector2 a=GetWorldToScreen(p,camera);int best=-1;float distance=12;
  for(int i=0;i<3;i++){Vector3 d{};(&d.x)[i]=1.35f;
   Vector2 b=GetWorldToScreen(Vector3Add(p,d),camera);
   float x=segmentDistance(mouse,a,b);if(x<distance){distance=x;best=i;}}
  return best;
 }
-void pickComponent(Vector2 mouse){if(selected<0)return;auto& o=objects[selected];sub=-1;
- float best=14;
+void pickComponent(Vector2 mouse){
+ if(mode==3){pick(mouse);sub=face;return;}
+ // First find the object under the cursor, so component mode can switch objects.
+ int prior=selected;pick(mouse);int hitObject=selected;
+ if(hitObject<0){selected=-1;face=-1;sub=-1;return;}
+ selected=hitObject;sub=-1;auto& o=objects[selected];
+ float best=16.0f;
  if(mode==1){for(int i=0;i<(int)o.vertices.size();i++){
   float d=Vector2Distance(mouse,GetWorldToScreen(world(o,i),camera));
-  if(d<best){best=d;sub=i;}}}
+  if(d<best){best=d;sub=i;}
+ }}
  else if(mode==2){auto e=edges(o);for(int i=0;i<(int)e.size();i++){
   float d=segmentDistance(mouse,GetWorldToScreen(world(o,e[i].first),camera),GetWorldToScreen(world(o,e[i].second),camera));
-  if(d<best){best=d;sub=i;}}}
- else if(mode==3){pick(mouse);sub=face;}
+  if(d<best){best=d;sub=i;}
+ }}
+ // Permit selecting vertices and edges even on the visible silhouette.
+ if(sub<0&&prior>=0&&prior<(int)objects.size()){
+  auto& old=objects[prior];float distance=14;
+  if(mode==1)for(int i=0;i<(int)old.vertices.size();i++){
+   float d=Vector2Distance(mouse,GetWorldToScreen(world(old,i),camera));
+   if(d<distance){distance=d;selected=prior;sub=i;}
+  }
+  if(mode==2){auto e=edges(old);for(int i=0;i<(int)e.size();i++){
+   float d=segmentDistance(mouse,GetWorldToScreen(world(old,e[i].first),camera),GetWorldToScreen(world(old,e[i].second),camera));
+   if(d<distance){distance=d;selected=prior;sub=i;}
+  }}
+ }
+ face=-1;
 }
 struct DragState{bool active=false;int axis=-1;Vector2 start{};Vector3 startPos{},center{};std::vector<Vector3> startVertices;std::vector<int> affected;};
 DragState drag;
@@ -119,9 +138,9 @@ if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFont
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
 int connectFeedback=0;while(!WindowShouldClose()){if(connectFeedback>0)connectFeedback--;int w=GetScreenWidth(),h=GetScreenHeight();Rectangle left={0,42,185,(float)h-68},right={(float)w-230,42,230,(float)h-68};bool inView=GetMouseX()>185&&GetMouseX()<w-230&&GetMouseY()>42&&GetMouseY()<h-26;
 if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Z)){if(IsKeyDown(KEY_LEFT_SHIFT))redo();else undo();}if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Y))redo();
-if(IsKeyPressed(KEY_ONE)){mode=1;sub=-1;}if(IsKeyPressed(KEY_TWO)){mode=2;sub=-1;}if(IsKeyPressed(KEY_THREE)){mode=3;sub=-1;}if(IsKeyPressed(KEY_ZERO)){mode=0;sub=-1;}
+if(IsKeyPressed(KEY_ONE)){mode=1;sub=-1;face=-1;}if(IsKeyPressed(KEY_TWO)){mode=2;sub=-1;face=-1;}if(IsKeyPressed(KEY_THREE)){mode=3;sub=-1;face=-1;}if(IsKeyPressed(KEY_ZERO)){mode=0;sub=-1;face=-1;}
 if(IsKeyPressed(KEY_W)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=1;if(IsKeyPressed(KEY_E)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=2;if(IsKeyPressed(KEY_R)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=3;
-if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){Vector2 m=GetMousePosition();if(m.y>=7&&m.y<36&&m.x>=w-190&&m.x<w-12){SetClipboardText(connectionPrompt);connectFeedback=180;}else if(m.x<185&&m.y>65){int row=(int)((m.y-75)/39);if(row>=0&&row<=2){checkpoint();objects.push_back(row==0?box():row==1?sphere():plane());selected=(int)objects.size()-1;face=-1;}else if(row==4)extrude();else if(row==5)inset();}else if(inView){int axis=handleHit(m);if(axis>=0)startDrag(axis);else if(mode==0){pick(m);sub=-1;}else pickComponent(m);}}
+if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){Vector2 m=GetMousePosition();if(m.y>=7&&m.y<36&&m.x>=w-190&&m.x<w-12){SetClipboardText(connectionPrompt);connectFeedback=180;}else if(m.y>=44&&m.y<=70&&m.x>=10&&m.x<180){int newMode=(int)((m.x-10)/43);if(newMode>=0&&newMode<=3){mode=newMode;sub=-1;face=-1;}}else if(m.x<185&&m.y>65){int row=(int)((m.y-75)/39);if(row>=0&&row<=2){checkpoint();objects.push_back(row==0?box():row==1?sphere():plane());selected=(int)objects.size()-1;face=-1;}else if(row==4)extrude();else if(row==5)inset();}else if(inView){int axis=handleHit(m);if(axis>=0)startDrag(axis);else if(mode==0){pick(m);sub=-1;}else pickComponent(m);}}
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
 if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)){
  Vector2 d=GetMouseDelta();Vector3 offset=Vector3Subtract(camera.position,camera.target);
@@ -164,7 +183,7 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 DrawLine3D({0,0,0},{2,0,0},RED);DrawLine3D({0,0,0},{0,2,0},GREEN);
-for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=oi==selected&&fi==face&&mode==3?ORANGE:Color{87,105,124,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),oi==selected?GOLD:LIGHTGRAY);}if(oi==selected){Vector3 p=pivot(o);DrawLine3D(p,Vector3Add(p,{1.6f,0,0}),RED);DrawLine3D(p,Vector3Add(p,{0,1.6f,0}),GREEN);DrawLine3D(p,Vector3Add(p,{0,0,1.6f}),BLUE);if(mode==1)for(int i=0;i<(int)o.vertices.size();i++)DrawSphere(world(o,i),.055f,i==sub?ORANGE:YELLOW);
- if(mode==2){auto e=edges(o);if(sub>=0&&sub<(int)e.size())DrawLine3D(world(o,e[sub].first),world(o,e[sub].second),ORANGE);}
- DrawSphere(Vector3Add(p,{1.35f,0,0}),.09f,RED);DrawSphere(Vector3Add(p,{0,1.35f,0}),.09f,GREEN);DrawSphere(Vector3Add(p,{0,0,1.35f}),.09f,BLUE);}}
-EndMode3D();DrawRectangle(0,0,w,42,{24,27,33,255});DrawLine(0,41,w,41,{57,65,77,255});UiText("CoreModel Native v0.8  |  C++23  |  Object: 0  Vertex: 1  Edge: 2  Face: 3",12,13,17,RAYWHITE);DrawRectangle(w-190,7,178,29,connectFeedback>0?Color{35,116,91,255}:Color{51,93,140,255});DrawRectangleLines(w-190,7,178,29,Color{115,142,171,255});UiText(connectFeedback>0?"COPIED TO CLIPBOARD":"COPY AI CONNECT",w-182,15,14,RAYWHITE);DrawRectangleRec(left,{29,33,40,255});DrawRectangleRec(right,{29,33,40,255});DrawLine(185,42,185,h-26,{55,62,73,255});DrawLine(w-230,42,w-230,h-26,{55,62,73,255});const char* labels[]={"ADD BOX","ADD SPHERE","ADD PLANE","","EXTRUDE FACE","INSET FACE"};for(int i=0;i<6;i++)UiText(labels[i],15,80+i*39,16,i==3?GRAY:RAYWHITE);UiText("PROPERTIES",w-215,65,18,RAYWHITE);UiText(TextFormat("Tool: %s",tool==1?"MOVE":tool==2?"ROTATE":"SCALE"),w-215,88,14,LIGHTGRAY);if(selected>=0){auto&o=objects[selected];UiText(o.name.c_str(),w-215,104,19,GOLD);UiText(TextFormat("Vertices: %i",(int)o.vertices.size()),w-215,146,16,RAYWHITE);UiText(TextFormat("Faces: %i",(int)o.faces.size()),w-215,174,16,RAYWHITE);UiText(TextFormat("Position: %.2f %.2f %.2f",o.position.x,o.position.y,o.position.z),w-215,210,14,RAYWHITE);}DrawRectangle(0,h-26,w,26,{24,27,33,255});DrawLine(0,h-26,w,h-26,{57,65,77,255});UiText("RMB orbit + WASD/QE fly | MMB pan | Wheel zoom | F frame | Numpad 1/3/7 views | W/E/R tools | Ctrl+Z/Y",10,h-20,13,LIGHTGRAY);EndDrawing();}if(uiFontLoaded)UnloadFont(uiFont);CloseWindow();}
+for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=oi==selected&&fi==face&&mode==3?ORANGE:Color{87,105,124,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),oi==selected?GOLD:LIGHTGRAY);}if(oi==selected){Vector3 p=pivot(o);if(mode==0||!active(o).empty()){DrawLine3D(p,Vector3Add(p,{1.6f,0,0}),RED);DrawLine3D(p,Vector3Add(p,{0,1.6f,0}),GREEN);DrawLine3D(p,Vector3Add(p,{0,0,1.6f}),BLUE);if(mode==1)for(int i=0;i<(int)o.vertices.size();i++)DrawSphere(world(o,i),.055f,i==sub?ORANGE:YELLOW);
+ if(mode==2){auto e=edges(o);for(int k=0;k<(int)e.size();k++)DrawLine3D(world(o,e[k].first),world(o,e[k].second),k==sub?ORANGE:Color{155,205,230,255});}
+ DrawSphere(Vector3Add(p,{1.35f,0,0}),.09f,RED);DrawSphere(Vector3Add(p,{0,1.35f,0}),.09f,GREEN);DrawSphere(Vector3Add(p,{0,0,1.35f}),.09f,BLUE);} }
+EndMode3D();DrawRectangle(0,0,w,42,{24,27,33,255});DrawLine(0,41,w,41,{57,65,77,255});UiText("CoreModel Native v0.8  |  C++23  |  Object: 0  Vertex: 1  Edge: 2  Face: 3",12,13,17,RAYWHITE);DrawRectangle(w-190,7,178,29,connectFeedback>0?Color{35,116,91,255}:Color{51,93,140,255});DrawRectangleLines(w-190,7,178,29,Color{115,142,171,255});UiText(connectFeedback>0?"COPIED TO CLIPBOARD":"COPY AI CONNECT",w-182,15,14,RAYWHITE);DrawRectangleRec(left,{29,33,40,255});for(int k=0;k<4;k++){int x=10+k*43;DrawRectangle(x,44,40,25,mode==k?Color{57,105,155,255}:Color{43,49,59,255});UiText(k==0?"OBJ":k==1?"VTX":k==2?"EDG":"FAC",x+5,51,12,RAYWHITE);}DrawRectangleRec(right,{29,33,40,255});DrawLine(185,42,185,h-26,{55,62,73,255});DrawLine(w-230,42,w-230,h-26,{55,62,73,255});const char* labels[]={"ADD BOX","ADD SPHERE","ADD PLANE","","EXTRUDE FACE","INSET FACE"};for(int i=0;i<6;i++)UiText(labels[i],15,80+i*39,16,i==3?GRAY:RAYWHITE);UiText("PROPERTIES",w-215,65,18,RAYWHITE);UiText(TextFormat("Tool: %s",tool==1?"MOVE":tool==2?"ROTATE":"SCALE"),w-215,88,14,LIGHTGRAY);if(selected>=0){auto&o=objects[selected];UiText(o.name.c_str(),w-215,104,19,GOLD);UiText(TextFormat("Vertices: %i",(int)o.vertices.size()),w-215,146,16,RAYWHITE);UiText(TextFormat("Faces: %i",(int)o.faces.size()),w-215,174,16,RAYWHITE);UiText(TextFormat("Position: %.2f %.2f %.2f",o.position.x,o.position.y,o.position.z),w-215,210,14,RAYWHITE);}DrawRectangle(0,h-26,w,26,{24,27,33,255});DrawLine(0,h-26,w,h-26,{57,65,77,255});UiText("RMB orbit + WASD/QE fly | MMB pan | Wheel zoom | F frame | Numpad 1/3/7 views | W/E/R tools | Ctrl+Z/Y",10,h-20,13,LIGHTGRAY);EndDrawing();}if(uiFontLoaded)UnloadFont(uiFont);CloseWindow();}
