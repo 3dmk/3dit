@@ -38,14 +38,19 @@ try {
   } else {
     Step 'Downloading updates from GitHub' 'git.exe' @('pull','--ff-only','origin','main')
   }
-  Status 'GitHub source is up to date; CMake will rebuild only changed targets'
+  Status 'Running the build for this launch; unchanged dependencies may be reused'
   if (Test-Path (Join-Path $build 'CMakeCache.txt')) {
     Step 'Configuring CMake (existing build)' 'cmake.exe' @('-S',$root,'-B',$build)
   } else {
     Step 'Configuring CMake (Visual Studio 2026 x64)' 'cmake.exe' @('-S',$root,'-B',$build,'-G','Visual Studio 18 2026','-A','x64')
   }
+  $beforeBuild = if (Test-Path $exe) { (Get-Item -LiteralPath $exe).LastWriteTimeUtc } else { [datetime]::MinValue }
   Step 'Building CoreModel Release' 'cmake.exe' @('--build',$build,'--config','Release','--parallel','2')
   if (-not (Test-Path $exe)) { throw "Build finished but executable is missing: $exe" }
+  $afterBuild = (Get-Item -LiteralPath $exe).LastWriteTimeUtc
+  $revision = (& git.exe rev-parse --short HEAD | Select-Object -First 1)
+  Status ("Build succeeded. Source revision: {0}; EXE modified (UTC): {1:o}" -f $revision,$afterBuild)
+  if ($afterBuild -eq $beforeBuild) { Status 'Executable unchanged: build system found no changes requiring relinking.' }
   New-Item -ItemType Directory -Force -Path (Split-Path $knownGood) | Out-Null
   Status 'Build completed. Starting the executable directly (not Visual Studio).'
   # Run the executable with PowerShell's call operator, matching the known-working command.
