@@ -43,12 +43,12 @@ float segmentDistance(Vector2 p,Vector2 a,Vector2 b){Vector2 d=Vector2Subtract(b
  float t=std::clamp(Vector2DotProduct(v,d)/std::max(1.0f,Vector2DotProduct(d,d)),0.0f,1.0f);
  return Vector2Distance(p,Vector2Add(a,Vector2Scale(d,t)));}
 int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode!=0&&active(objects[selected]).empty()))return -1;Vector3 p=pivot(objects[selected]);
- Vector2 a=GetWorldToScreen(p,camera);int best=-1;float distance=12;
+ Vector2 a=GetWorldToScreen(p,camera);int best=-1;float distance=16;
  for(int i=0;i<3;i++){
   if(tool==2){
    Vector3 u=i==0?Vector3{0,1,0}:Vector3{1,0,0};
    Vector3 v=i==2?Vector3{0,1,0}:Vector3{0,0,1};
-   float ringDistance=distance;
+   float ringDistance=1.0e9f;
    for(int j=0;j<64;j++){
     float t0=6.2831853f*j/64.0f,t1=6.2831853f*(j+1)/64.0f;
     Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f));
@@ -59,7 +59,7 @@ int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode
   }else{
    Vector3 d{};(&d.x)[i]=1.35f;
    Vector2 b=GetWorldToScreen(Vector3Add(p,d),camera);
-   float x=segmentDistance(mouse,a,b);if(x<distance){distance=x;best=i;}
+   float x=segmentDistance(mouse,a,b);\n   // End-cap picking allows selecting arrows and scale cubes outside the mesh silhouette.\n   x=std::min(x,Vector2Distance(mouse,GetWorldToScreen(Vector3Add(p,Vector3Scale(d,1.6f/1.35f)),camera)));\n   if(x<distance){distance=x;best=i;}
   }
  }
  return best;
@@ -315,6 +315,18 @@ if(mode==1&&selected>=0&&selected<(int)objects.size()){
   if(chosen)DrawCircleLines((int)screen.x,(int)screen.y,6.0f,Color{255,225,225,255});
  }
  EndScissorMode();
+}
+// Screen-space cursor crosshair: always above scene geometry, but below UI panels.
+if(inView && !drag.active){
+ Vector2 cursor=GetMousePosition();
+ int hoveredAxis=handleHit(cursor);
+ Color ink=hoveredAxis==0?RED:hoveredAxis==1?GREEN:hoveredAxis==2?BLUE:Color{230,236,245,230};
+ DrawCircleLines((int)cursor.x,(int)cursor.y,7.0f,Color{12,18,25,210});
+ DrawLineEx({cursor.x-13,cursor.y},{cursor.x-4,cursor.y},ink,1.5f);
+ DrawLineEx({cursor.x+4,cursor.y},{cursor.x+13,cursor.y},ink,1.5f);
+ DrawLineEx({cursor.x,cursor.y-13},{cursor.x,cursor.y-4},ink,1.5f);
+ DrawLineEx({cursor.x,cursor.y+4},{cursor.x,cursor.y+13},ink,1.5f);
+ DrawCircleV(cursor,1.5f,ink);
 }
 rlImGuiBegin();
 // Dockable tool windows, with a transparent central node for the raylib scene.
