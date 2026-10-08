@@ -528,6 +528,17 @@ while(!WindowShouldClose()){
  bool inView=!ImGui::GetIO().WantCaptureMouse && GetMousePosition().y>44.0f;
  bool typing=ImGui::GetIO().WantTextInput;
  if(!typing){
+  // Delete the selected actor in Object mode. Component deletion remains in Editable Polygon.
+  if(mode==0&&selected>=0&&selected<(int)objects.size()&&
+     (IsKeyPressed(KEY_DELETE)||IsKeyPressed(KEY_BACKSPACE))){
+   checkpoint();
+   objects.erase(objects.begin()+selected);
+   selected=-1;face=-1;sub=-1;
+   rectangleSelected.clear();rectangleObject=-1;
+   rectanglePending=false;rectangleDragging=false;
+   targetWeldArmed=false;targetWeldSource=-1;targetWeldObject=-1;
+   drag.active=false;
+  }
   if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Z)){if(IsKeyDown(KEY_LEFT_SHIFT))redo();else undo();}
   if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Y))redo();
   if(IsKeyPressed(KEY_ONE)){mode=1;sub=-1;face=-1;}
