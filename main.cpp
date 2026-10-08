@@ -40,16 +40,35 @@ void removeSelectedVertex(){
  o.faces.erase(std::remove_if(o.faces.begin(),o.faces.end(),[&](const std::vector<int>& f){return std::find(f.begin(),f.end(),v)!=f.end();}),o.faces.end());
  compactVertices(o);sub=-1;face=-1;
 }
+// Weld only an existing polygon edge: merging non-adjacent corners can fold an n-gon.
+bool verticesSharePolygonEdge(const MeshObject& o,int a,int b){
+ for(const auto& f:o.faces)for(size_t i=0;i<f.size();i++)
+  if((f[i]==a&&f[(i+1)%f.size()]==b)||(f[i]==b&&f[(i+1)%f.size()]==a))return true;
+ return false;
+}
+void cleanWeldedFaces(MeshObject& o){
+ for(auto& f:o.faces){
+  std::vector<int> clean;clean.reserve(f.size());
+  for(int v:f)if(clean.empty()||clean.back()!=v)clean.push_back(v);
+  if(clean.size()>1&&clean.front()==clean.back())clean.pop_back();
+  f.swap(clean);
+ }
+ o.faces.erase(std::remove_if(o.faces.begin(),o.faces.end(),[](const std::vector<int>& f){
+  if(f.size()<3)return true;
+  std::set<int> unique(f.begin(),f.end());
+  return unique.size()!=f.size();
+ }),o.faces.end());
+}
 void weldSelectedVertex(){
  if(mode!=1||!validComponent())return;
  auto& o=objects[selected];if(sub<0||sub>=(int)o.vertices.size()||o.vertices.size()<2)return;
  int other=-1;float nearest=1.0e20f;
- for(int i=0;i<(int)o.vertices.size();i++)if(i!=sub){float d=Vector3Distance(o.vertices[sub],o.vertices[i]);if(d<nearest){nearest=d;other=i;}}
+ for(int i=0;i<(int)o.vertices.size();i++)if(i!=sub&&verticesSharePolygonEdge(o,sub,i)){float d=Vector3Distance(o.vertices[sub],o.vertices[i]);if(d<nearest){nearest=d;other=i;}}
  if(other<0)return;
  checkpoint();Vector3 midpoint=Vector3Scale(Vector3Add(o.vertices[sub],o.vertices[other]),.5f);
  o.vertices[other]=midpoint;
  for(auto& f:o.faces)for(int& v:f)if(v==sub)v=other;
- o.faces.erase(std::remove_if(o.faces.begin(),o.faces.end(),[](const std::vector<int>& f){std::set<int> unique(f.begin(),f.end());return unique.size()<3;}),o.faces.end());
+ cleanWeldedFaces(o);
  compactVertices(o);sub=-1;face=-1;
 }
 void breakSelectedVertex(){
@@ -281,11 +300,10 @@ void applyTargetWeld(int destination){
  if(mode!=1||selected!=targetWeldObject||!validComponent())return;
  auto& o=objects[selected];
  if(destination<0||destination>=(int)o.vertices.size()||targetWeldSource<0||targetWeldSource>=(int)o.vertices.size()||destination==targetWeldSource)return;
+ if(!verticesSharePolygonEdge(o,targetWeldSource,destination))return;
  checkpoint();const int source=targetWeldSource;
  for(auto& f:o.faces)for(int& v:f)if(v==source)v=destination;
- o.faces.erase(std::remove_if(o.faces.begin(),o.faces.end(),[](const std::vector<int>& f){
-  std::set<int> unique(f.begin(),f.end());return unique.size()<3;
- }),o.faces.end());
+ cleanWeldedFaces(o);
  compactVertices(o);sub=-1;face=-1;
 }
 
