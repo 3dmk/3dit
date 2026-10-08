@@ -7,37 +7,56 @@ $backupDir = Join-Path $root 'KnownGood'
 $backupExe = Join-Path $backupDir 'CoreModel.exe'
 $log = Join-Path $root 'Update-and-Launch.log'
 
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+$form = New-Object System.Windows.Forms.Form
+$form.Text = 'CoreModel - Starting'
+$form.Size = New-Object System.Drawing.Size(540,310)
+$form.StartPosition = 'CenterScreen'
+$form.FormBorderStyle = 'FixedDialog'
+$form.MaximizeBox = $false
+$form.BackColor = [System.Drawing.Color]::FromArgb(17,25,37)
+$form.ForeColor = [System.Drawing.Color]::White
+$form.Font = New-Object System.Drawing.Font('Segoe UI',10)
+$heading = New-Object System.Windows.Forms.Label
+$heading.Text = 'CoreModel'
+$heading.Font = New-Object System.Drawing.Font('Segoe UI Semibold',26)
+$heading.ForeColor = [System.Drawing.Color]::FromArgb(235,242,251)
+$heading.SetBounds(32,28,460,56)
+$form.Controls.Add($heading)
+$subtitle = New-Object System.Windows.Forms.Label
+$subtitle.Text = 'Preparing your 3D workspace'
+$subtitle.ForeColor = [System.Drawing.Color]::FromArgb(145,167,190)
+$subtitle.SetBounds(35,90,460,26)
+$form.Controls.Add($subtitle)
+$statusLabel = New-Object System.Windows.Forms.Label
+$statusLabel.Text = 'Initializing...'
+$statusLabel.SetBounds(35,141,455,25)
+$form.Controls.Add($statusLabel)
+$progress = New-Object System.Windows.Forms.ProgressBar
+$progress.SetBounds(35,177,455,12)
+$progress.Style = 'Continuous'
+$progress.Maximum = 100
+$form.Controls.Add($progress)
+$detailLabel = New-Object System.Windows.Forms.Label
+$detailLabel.ForeColor = [System.Drawing.Color]::FromArgb(145,167,190)
+$detailLabel.SetBounds(35,203,455,46)
+$form.Controls.Add($detailLabel)
+$form.Show()
+[System.Windows.Forms.Application]::DoEvents()
 function Draw-Screen([int]$percent, [string]$phase, [string]$detail) {
-  $width = 52
-  $filled = [Math]::Min($width,[Math]::Max(0,[int][Math]::Floor($percent*$width/100)))
-  $bar = ('#' * $filled) + ('.' * ($width-$filled))
-  Clear-Host
-  Write-Host ''
-  Write-Host '  +--------------------------------------------------------------------+' -ForegroundColor DarkCyan
-  Write-Host '  |                                                                    |' -ForegroundColor DarkCyan
-  Write-Host '  |                         C O R E M O D E L                          |' -ForegroundColor Cyan
-  Write-Host '  |                     UPDATE  /  BUILD  /  LAUNCH                    |' -ForegroundColor Gray
-  Write-Host '  |                                                                    |' -ForegroundColor DarkCyan
-  Write-Host '  +--------------------------------------------------------------------+' -ForegroundColor DarkCyan
-  Write-Host ''
-  Write-Host ("  [{0}] {1,3}%" -f $bar,$percent) -ForegroundColor Cyan
-  Write-Host ''
-  Write-Host ("  {0}" -f $phase) -ForegroundColor White
-  Write-Host ("  {0}" -f $detail) -ForegroundColor DarkGray
-  Write-Host ''
-  Write-Host '  Previous working build is protected in KnownGood.' -ForegroundColor DarkCyan
-  Write-Host '  Detailed output: Update-and-Launch.log' -ForegroundColor DarkGray
+  $progress.Value = [Math]::Max(0,[Math]::Min(100,$percent))
+  $statusLabel.Text = $phase
+  $detailLabel.Text = $detail
+  [System.Windows.Forms.Application]::DoEvents()
 }
 function Fail([string]$message) {
   Draw-Screen 0 'UPDATE STOPPED' $message
-  Write-Host ''
-  Write-Host ("  ERROR: {0}" -f $message) -ForegroundColor Red
-  if (Test-Path $backupExe) { Write-Host ("  Known-good build: {0}" -f $backupExe) -ForegroundColor Yellow }
-  if (Test-Path $log) {
-    Write-Host ''
-    Write-Host '  Last log lines:' -ForegroundColor Yellow
-    Get-Content $log -Tail 10 | ForEach-Object { Write-Host ("  " + $_) -ForegroundColor Gray }
-  }
+  $tail = if(Test-Path $log) { (Get-Content $log -Tail 12) -join [Environment]::NewLine } else { '' }
+  $form.Hide()
+  [System.Windows.Forms.MessageBox]::Show(("CoreModel could not finish updating.`r`n`r`n" + $message + "`r`n`r`nPrevious executable preserved in KnownGood.`r`n`r`nLog: " + $log + "`r`n`r`n" + $tail),'CoreModel Update Error','OK','Error') | Out-Null
+  $form.Close()
   exit 1
 }
 function Run-Step([string]$label, [string]$command, [string[]]$arguments) {
@@ -101,6 +120,7 @@ try {
   Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe)
   Draw-Screen 100 'READY' 'CoreModel launched successfully.'
   Start-Sleep -Seconds 2
+  $form.Close()
 } catch {
   Fail $_.Exception.Message
 }
