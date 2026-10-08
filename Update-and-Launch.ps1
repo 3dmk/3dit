@@ -38,7 +38,6 @@ try {
   & cmake --build $build --config Release --parallel 2
   if ($LASTEXITCODE -ne 0) { Fail 'Compilation failed; previous executable is preserved.' }
   if (-not (Test-Path $exe)) { Fail 'Build succeeded but CoreModel.exe was not found' }
-  Copy-Item $exe $backupExe -Force
   Write-Host 'Build succeeded. Starting CoreModel...' -ForegroundColor Green
   Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe)
 } catch {
