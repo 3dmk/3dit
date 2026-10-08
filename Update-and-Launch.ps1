@@ -40,10 +40,18 @@ function Fail([string]$message) {
   }
   exit 1
 }
-function Run-Step([string]$label, [scriptblock]$action) {
+function Run-Step([string]$label, [string]$command, [string[]]$arguments) {
   ("===== {0} =====" -f $label) | Out-File -FilePath $log -Append -Encoding utf8
-  & $action *>> $log
-  if ($LASTEXITCODE -ne 0) { Fail "$label failed (exit code $LASTEXITCODE)" }
+  $stdoutFile = Join-Path $env:TEMP 'coremodel-launch-stdout.log'
+  $stderrFile = Join-Path $env:TEMP 'coremodel-launch-stderr.log'
+  try {
+    $process = Start-Process -FilePath $command -ArgumentList $arguments -WorkingDirectory $root -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile -ErrorAction Stop
+    if (Test-Path $stdoutFile) { Get-Content $stdoutFile | Out-File -FilePath $log -Append -Encoding utf8 }
+    if (Test-Path $stderrFile) { Get-Content $stderrFile | Out-File -FilePath $log -Append -Encoding utf8 }
+    if ($process.ExitCode -ne 0) { Fail "$label failed (exit code $($process.ExitCode))" }
+  } finally {
+    Remove-Item $stdoutFile,$stderrFile -Force -ErrorAction SilentlyContinue
+  }
 }
 try {
   Draw-Screen 5 'INITIALIZING' 'Checking development tools and local project...'
@@ -59,13 +67,13 @@ try {
   if (Test-Path $exe) { Copy-Item $exe $backupExe -Force }
 
   Draw-Screen 20 'CHECKING FOR UPDATES' 'Pulling the latest CoreModel source from GitHub...'
-  Run-Step 'Git update' { git pull --ff-only origin main }
+  Run-Step 'Git update' 'git.exe' @('pull','--ff-only','origin','main')
 
   Draw-Screen 45 'CONFIGURING PROJECT' 'Preparing Visual Studio 2026 and CMake dependencies...'
-  Run-Step 'CMake configure' { cmake -S $root -B $build -G 'Visual Studio 18 2026' -A x64 }
+  Run-Step 'CMake configure' 'cmake.exe' @('-S', $root, '-B', $build, '-G', 'Visual Studio 18 2026', '-A', 'x64')
 
   Draw-Screen 70 'BUILDING COREMODEL' 'Compiling C++ code. This may take a few minutes...'
-  Run-Step 'Release build' { cmake --build $build --config Release --parallel 2 }
+  Run-Step 'Release build' 'cmake.exe' @('--build', $build, '--config', 'Release', '--parallel', '2')
   if (-not (Test-Path $exe)) { Fail 'Build completed but CoreModel.exe was not found' }
 
   Draw-Screen 95 'STARTING EDITOR' 'Launching CoreModel...'
