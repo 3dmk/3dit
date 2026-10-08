@@ -286,4 +286,9 @@ if(ImGui::Begin("CoreModel AI")){
 }
 ImGui::End();
 rlImGuiEnd();
-EndDrawing();}rlImGuiShutdown();if(uiFontLoaded)UnloadFont(uiFont);CloseWindow();
+EndDrawing();
+}
+rlImGuiShutdown();
+if(uiFontLoaded)UnloadFont(uiFont);
+CloseWindow();
+}
