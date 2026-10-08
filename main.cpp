@@ -345,8 +345,7 @@ if(showCrosshair && !crosshairCursorHidden){HideCursor();crosshairCursorHidden=t
 else if(!showCrosshair && crosshairCursorHidden){ShowCursor();crosshairCursorHidden=false;}
 if(showCrosshair){
  Vector2 cursor=GetMousePosition();
- int hoveredAxis=handleHit(cursor);
- Color ink=hoveredAxis==0?RED:hoveredAxis==1?GREEN:hoveredAxis==2?BLUE:Color{230,236,245,230};
+ Color ink={230,236,245,230}; // Fixed crosshair color over actors and all gizmo axes.
  DrawCircleLines((int)cursor.x,(int)cursor.y,7.0f,Color{12,18,25,210});
  DrawLineEx({cursor.x-13,cursor.y},{cursor.x-4,cursor.y},1.5f,ink);
  DrawLineEx({cursor.x+4,cursor.y},{cursor.x+13,cursor.y},1.5f,ink);
