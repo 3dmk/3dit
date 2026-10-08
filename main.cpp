@@ -324,8 +324,8 @@ if(ImGui::Begin("##CoreModelTopToolbar",nullptr,toolbarFlags)){
  if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
  if(connectFeedback>0){ImGui::SameLine();ImGui::TextUnformatted("Copied");}
 }
-ImGui::End()
-ImGui::PopStyleVar();;
+ImGui::End();
+ImGui::PopStyleVar();
 
 
 if(ImGui::Begin("Modeling Tools")){
