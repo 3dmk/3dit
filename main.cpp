@@ -333,7 +333,7 @@ bool rectangleContains(Vector2 p){
 void selectRectangle(){
  if(selected<0||selected>=(int)objects.size()||mode==0)return;
  auto& o=objects[selected];
- if(rectangleObject!=selected||(!IsKeyDown(KEY_LEFT_CONTROL)&&!IsKeyDown(KEY_RIGHT_CONTROL))rectangleSelected.clear();
+ if(rectangleObject!=selected||(!IsKeyDown(KEY_LEFT_CONTROL)&&!IsKeyDown(KEY_RIGHT_CONTROL)))rectangleSelected.clear();
  rectangleObject=selected;
  if(mode==1){for(int i=0;i<(int)o.vertices.size();i++)if(rectangleContains(GetWorldToScreen(world(o,i),camera)))rectangleSelected.insert(i);}
  if(mode==2||mode==4){
