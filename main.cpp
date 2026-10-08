@@ -59,7 +59,10 @@ int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode
   }else{
    Vector3 d{};(&d.x)[i]=1.35f;
    Vector2 b=GetWorldToScreen(Vector3Add(p,d),camera);
-   float x=segmentDistance(mouse,a,b);\n   // End-cap picking allows selecting arrows and scale cubes outside the mesh silhouette.\n   x=std::min(x,Vector2Distance(mouse,GetWorldToScreen(Vector3Add(p,Vector3Scale(d,1.6f/1.35f)),camera)));\n   if(x<distance){distance=x;best=i;}
+   float x=segmentDistance(mouse,a,b);
+   // End-cap picking allows selecting arrows and scale cubes outside the mesh silhouette.
+   x=std::min(x,Vector2Distance(mouse,GetWorldToScreen(Vector3Add(p,Vector3Scale(d,1.6f/1.35f)),camera)));
+   if(x<distance){distance=x;best=i;}
   }
  }
  return best;
