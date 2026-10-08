@@ -316,7 +316,51 @@ std::vector<std::pair<int,int>> edges(const MeshObject& o){
  }
  return {e.begin(),e.end()};
 }
+std::set<int> rectangleSelected;
+int rectangleObject=-1;
+bool rectanglePending=false,rectangleDragging=false;
+Vector2 rectangleStart{},rectangleEnd{};
+bool rectangleContains(Vector2 p){
+ return p.x>=std::min(rectangleStart.x,rectangleEnd.x)&&p.x<=std::max(rectangleStart.x,rectangleEnd.x)&&p.y>=std::min(rectangleStart.y,rectangleEnd.y)&&p.y<=std::max(rectangleStart.y,rectangleEnd.y);
+}
+void selectRectangle(){
+ if(selected<0||selected>=(int)objects.size()||mode==0)return;
+ auto& o=objects[selected];
+ if(!IsKeyDown(KEY_LEFT_CONTROL)&&!IsKeyDown(KEY_RIGHT_CONTROL))rectangleSelected.clear();
+ rectangleObject=selected;
+ if(mode==1){for(int i=0;i<(int)o.vertices.size();i++)if(rectangleContains(GetWorldToScreen(world(o,i),camera)))rectangleSelected.insert(i);}
+ if(mode==2||mode==4){
+  auto e=edges(o);
+  for(int i=0;i<(int)e.size();i++){
+   if(!rectangleContains(GetWorldToScreen(world(o,e[i].first),camera))||!rectangleContains(GetWorldToScreen(world(o,e[i].second),camera)))continue;
+   if(mode==4){
+    int count=0;
+    for(const auto& f:o.faces)for(size_t j=0;j<f.size();j++){
+     int a=f[j],b=f[(j+1)%f.size()];
+     if(std::min(a,b)==e[i].first&&std::max(a,b)==e[i].second)count++;
+    }
+    if(count!=1)continue;
+   }
+   rectangleSelected.insert(i);
+  }
+ }
+ if(mode==3){for(int i=0;i<(int)o.faces.size();i++){
+  bool inside=!o.faces[i].empty();
+  for(int v:o.faces[i])if(!rectangleContains(GetWorldToScreen(world(o,v),camera))){inside=false;break;}
+  if(inside)rectangleSelected.insert(i);
+ }}
+ sub=-1;face=-1;
+ if(rectangleSelected.size()==1){if(mode==3)face=*rectangleSelected.begin();else sub=*rectangleSelected.begin();}
+}
 std::vector<int> active(const MeshObject& o){
+ if(selected>=0&&selected<(int)objects.size()&&&o==&objects[selected]&&rectangleObject==selected&&!rectangleSelected.empty()){
+  std::set<int> vertices;
+  if(mode==1)for(int v:rectangleSelected)if(v>=0&&v<(int)o.vertices.size())vertices.insert(v);
+  if(mode==2||mode==4){auto e=edges(o);for(int i:rectangleSelected)if(i>=0&&i<(int)e.size()){vertices.insert(e[i].first);vertices.insert(e[i].second);}}
+  if(mode==3)for(int i:rectangleSelected)if(i>=0&&i<(int)o.faces.size())for(int v:o.faces[i])vertices.insert(v);
+  return {vertices.begin(),vertices.end()};
+ }
+
  if(mode==1&&sub>=0&&sub<(int)o.vertices.size())return {sub};
  if(mode==2||mode==4){auto e=edges(o);if(sub>=0&&sub<(int)e.size())return {e[sub].first,e[sub].second};}
  if(mode==3&&face>=0&&face<(int)o.faces.size())return o.faces[face];
@@ -505,9 +549,19 @@ while(!WindowShouldClose()){
   Vector2 m=GetMousePosition();
   int axis=handleHit(m);
   if(axis>=0)startDrag(axis);
-  else if(mode==0){pick(m);sub=-1;}
-  else {pickComponent(m);if(targetWeldArmed){if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}}
+  else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
+  else if(targetWeldArmed){pickComponent(m);if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}
+  else{rectanglePending=true;rectangleStart=m;rectangleEnd=m;}
  }
+if(rectanglePending&&IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
+ rectangleEnd=GetMousePosition();
+ if(Vector2Distance(rectangleStart,rectangleEnd)>5.0f)rectangleDragging=true;
+}
+if(rectanglePending&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){
+ if(rectangleDragging)selectRectangle();
+ else{pickComponent(rectangleEnd);rectangleSelected.clear();rectangleObject=selected;}
+ rectanglePending=false;rectangleDragging=false;
+}
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
 if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)){
  Vector2 d=GetMouseDelta();Vector3 offset=Vector3Subtract(camera.position,camera.target);
@@ -550,7 +604,7 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 DrawLine3D({0,0,0},{2,0,0},RED);DrawLine3D({0,0,0},{0,2,0},GREEN);
-for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&fi==face&&mode==3)?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&fi==face&&mode==3)?Color{255,92,92,255}:Color{78,82,88,255});}}
+for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{255,92,92,255}:Color{78,82,88,255});}}
 // Draw the selected transform overlay only after all opaque object geometry.
 if(selected>=0&&selected<(int)objects.size()){
  auto& o=objects[selected];
@@ -585,7 +639,7 @@ if(selected>=0&&selected<(int)objects.size()){
    }
   }
  }
- if(mode==2){auto e=edges(o);for(int k=0;k<(int)e.size();k++)DrawLine3D(world(o,e[k].first),world(o,e[k].second),k==sub?Color{255,65,65,255}:Color{120,125,132,255});}
+ if(mode==2){auto e=edges(o);for(int k=0;k<(int)e.size();k++)DrawLine3D(world(o,e[k].first),world(o,e[k].second),(k==sub||(rectangleObject==selected&&rectangleSelected.count(k)>0))?Color{255,65,65,255}:Color{120,125,132,255});}
 } }
 rlDrawRenderBatchActive();
 rlEnableDepthTest();
@@ -602,11 +656,17 @@ if(mode==1&&selected>=0&&selected<(int)objects.size()){
   if(Vector3DotProduct(Vector3Subtract(point,camera.position),forward)<=0.0f)continue;
   Vector2 screen=GetWorldToScreen(point,camera);
   if(screen.x<186||screen.x>w-231||screen.y<43||screen.y>h-27)continue;
-  const bool chosen=i==sub;
+  const bool chosen=i==sub||(rectangleObject==selected&&rectangleSelected.count(i)>0);
   DrawCircleV(screen,chosen?5.0f:3.5f,chosen?Color{255,72,72,255}:Color{55,145,255,255});
   if(chosen)DrawCircleLines((int)screen.x,(int)screen.y,6.0f,Color{255,225,225,255});
  }
  EndScissorMode();
+}
+if(rectanglePending&&rectangleDragging){
+ float x=std::min(rectangleStart.x,rectangleEnd.x),y=std::min(rectangleStart.y,rectangleEnd.y);
+ float rw=fabsf(rectangleEnd.x-rectangleStart.x),rh=fabsf(rectangleEnd.y-rectangleStart.y);
+ DrawRectangle((int)x,(int)y,(int)rw,(int)rh,Color{70,145,235,42});
+ DrawRectangleLinesEx({x,y,rw,rh},1.5f,Color{90,170,255,235});
 }
 // Show the precision crosshair only while hovering over a scene actor or transform gizmo.
 bool cursorOnActor=false;
