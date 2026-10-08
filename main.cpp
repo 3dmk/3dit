@@ -142,6 +142,7 @@ ImGui::StyleColorsDark();
 if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFontLoaded=uiFont.texture.id!=0;}
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
 int connectFeedback=0;
+bool showProperties=true,showAI=true;
 while(!WindowShouldClose()){
  if(connectFeedback>0)connectFeedback--;
  int w=GetScreenWidth(),h=GetScreenHeight();
@@ -234,6 +235,22 @@ rlImGuiBegin();
 // Dockable tool windows, with a transparent central node for the raylib scene.
 ImGuiViewport* viewport=ImGui::GetMainViewport();
 ImGui::DockSpaceOverViewport(0,viewport,ImGuiDockNodeFlags_PassthruCentralNode);
+const ImGuiWindowFlags toolbarFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
+ ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoDocking;
+ImGui::SetNextWindowPos(viewport->Pos,ImGuiCond_Always);
+ImGui::SetNextWindowSize(ImVec2(viewport->Size.x,42.0f),ImGuiCond_Always);
+if(ImGui::Begin("##CoreModelTopToolbar",nullptr,toolbarFlags)){
+ ImGui::TextUnformatted("CoreModel");
+ ImGui::SameLine();ImGui::SeparatorText("Panels");
+ ImGui::SameLine();
+ if(ImGui::Button(showProperties?"Hide Properties":"Properties"))showProperties=!showProperties;
+ ImGui::SameLine();
+ if(ImGui::Button(showAI?"Hide CoreModel AI":"CoreModel AI"))showAI=!showAI;
+ ImGui::SameLine();
+ if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
+ if(connectFeedback>0){ImGui::SameLine();ImGui::TextUnformatted("Copied");}
+}
+ImGui::End();
 ImGui::SetNextWindowPos(ImVec2(10,45),ImGuiCond_FirstUseEver);
 ImGui::SetNextWindowSize(ImVec2(205,385),ImGuiCond_FirstUseEver);
 if(ImGui::Begin("Modeling Tools")){
@@ -261,7 +278,8 @@ if(ImGui::Begin("Create Objects")){
  if(ImGui::Button("Plane",ImVec2(-1,0))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
 }
 ImGui::End();
-ImGui::SetNextWindowPos(ImVec2((float)w-270,45),ImGuiCond_FirstUseEver);
+if(showProperties){
+ImGui::SetNextWindowPos(ImVec2((float)w-270,55),ImGuiCond_FirstUseEver);
 ImGui::SetNextWindowSize(ImVec2(260,340),ImGuiCond_FirstUseEver);
 if(ImGui::Begin("Properties")){
  if(selected>=0&&selected<(int)objects.size()){
@@ -280,6 +298,8 @@ if(ImGui::Begin("Properties")){
  }else ImGui::TextUnformatted("No object selected.");
 }
 ImGui::End();
+}
+if(showAI){
 ImGui::SetNextWindowPos(ImVec2(10,(float)h-145),ImGuiCond_FirstUseEver);
 ImGui::SetNextWindowSize(ImVec2(300,105),ImGuiCond_FirstUseEver);
 if(ImGui::Begin("CoreModel AI")){
@@ -288,6 +308,7 @@ if(ImGui::Begin("CoreModel AI")){
  ImGui::TextDisabled("GitHub workflow - local build required");
 }
 ImGui::End();
+}
 rlImGuiEnd();
 EndDrawing();
 }
