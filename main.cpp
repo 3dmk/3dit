@@ -398,11 +398,10 @@ int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode
  return best;
 }
 void pickComponent(Vector2 mouse){
- if(mode==3){pick(mouse);sub=face;return;}
- // First find the object under the cursor, so component mode can switch objects.
- int prior=selected;pick(mouse);int hitObject=selected;
- if(hitObject<0){selected=-1;face=-1;sub=-1;return;}
- selected=hitObject;sub=-1;auto& o=objects[selected];
+ if(selected<0||selected>=(int)objects.size())return;
+ if(mode==3){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int hit=-1;const auto& o=objects[selected];for(int fi=0;fi<(int)o.faces.size();fi++){const auto& f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto collision=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!collision.hit)collision=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(collision.hit&&collision.distance<nearest){nearest=collision.distance;hit=fi;}}}face=hit;sub=hit;return;}
+ // Sub-object selection is restricted to the actor already selected in Object mode.
+ sub=-1;auto& o=objects[selected];
  float best=16.0f;
  if(mode==1){for(int i=0;i<(int)o.vertices.size();i++){
   float d=Vector2Distance(mouse,GetWorldToScreen(world(o,i),camera));
@@ -412,18 +411,6 @@ void pickComponent(Vector2 mouse){
   float d=segmentDistance(mouse,GetWorldToScreen(world(o,e[i].first),camera),GetWorldToScreen(world(o,e[i].second),camera));
   if(d<best){if(mode==4){auto bounds=boundaryEdges(o);if(std::find(bounds.begin(),bounds.end(),e[i])==bounds.end())continue;}best=d;sub=i;}
  }}
- // Permit selecting vertices and edges even on the visible silhouette.
- if(sub<0&&prior>=0&&prior<(int)objects.size()){
-  auto& old=objects[prior];float distance=14;
-  if(mode==1)for(int i=0;i<(int)old.vertices.size();i++){
-   float d=Vector2Distance(mouse,GetWorldToScreen(world(old,i),camera));
-   if(d<distance){distance=d;selected=prior;sub=i;}
-  }
-  if(mode==2||mode==4){auto e=edges(old);for(int i=0;i<(int)e.size();i++){
-   float d=segmentDistance(mouse,GetWorldToScreen(world(old,e[i].first),camera),GetWorldToScreen(world(old,e[i].second),camera));
-   if(d<distance){if(mode==4){auto bounds=boundaryEdges(old);if(std::find(bounds.begin(),bounds.end(),e[i])==bounds.end())continue;}distance=d;selected=prior;sub=i;}
-  }}
- }
  face=-1;
 }
 struct DragState{bool active=false;int axis=-1;Vector2 start{};Vector3 startPos{},center{};std::vector<Vector3> startVertices;std::vector<int> affected;};
@@ -551,7 +538,7 @@ while(!WindowShouldClose()){
   if(axis>=0)startDrag(axis);
   else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
   else if(targetWeldArmed){pickComponent(m);if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}
-  else{rectanglePending=true;rectangleStart=m;rectangleEnd=m;}
+  else if(selected>=0){rectanglePending=true;rectangleStart=m;rectangleEnd=m;}
  }
 if(rectanglePending&&IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
  rectangleEnd=GetMousePosition();
@@ -768,7 +755,8 @@ if(ImGui::Begin("Editable Polygon")){
  ImGui::TextUnformatted("Selection mode");
  const char* names[]={"Object","Vertex","Edge","Border","Polygon"};
  const int subModes[]={0,1,2,4,3};
- for(int i=0;i<5;i++){if(i==3)ImGui::NewLine();else if(i)ImGui::SameLine();if(ImGui::RadioButton(names[i],mode==subModes[i])){mode=subModes[i];sub=-1;face=-1;targetWeldArmed=false;}}
+ for(int i=0;i<5;i++){if(i==3)ImGui::NewLine();else if(i)ImGui::SameLine();if(ImGui::RadioButton(names[i],mode==subModes[i])){if(subModes[i]==0||selected>=0){mode=subModes[i];sub=-1;face=-1;targetWeldArmed=false;rectangleSelected.clear();rectangleObject=-1;}}}
+ if(selected<0)ImGui::TextDisabled("Select an actor in Object mode before editing sub-objects.");
  ImGui::Separator();
  auto operation=[&](const char* label,bool available,void(*fn)()){
   ImGui::BeginDisabled(!available);
