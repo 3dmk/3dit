@@ -1,9 +1,23 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-rem Refresh first so an old launcher can recover itself.
-where git >nul 2>&1
-if not errorlevel 1 git pull --ff-only origin main >nul 2>&1
-rem Start the native Windows splash without leaving a console window open.
-start "" powershell.exe -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0Update-and-Launch.ps1"
+rem Keep the command launcher minimal. PowerShell owns update, logging and errors.
+set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+if not exist "%PS%" (
+  echo ERROR: Windows PowerShell was not found.
+  pause
+  exit /b 1
+)
+if not exist "%~dp0Update-and-Launch.ps1" (
+  echo ERROR: Update-and-Launch.ps1 is missing.
+  pause
+  exit /b 1
+)
+"%PS%" -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0Update-and-Launch.ps1"
+if errorlevel 1 (
+  echo.
+  echo CoreModel update failed. Check Update-and-Launch.log in this folder.
+  pause
+  exit /b 1
+)
 exit /b 0
