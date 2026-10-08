@@ -29,11 +29,10 @@ try {
   Write-Host 'Checking GitHub updates...' -ForegroundColor Cyan
   & git pull --ff-only origin main
   if ($LASTEXITCODE -ne 0) { Fail 'Git pull failed; source was not reset or overwritten.' }
-  if (-not (Test-Path (Join-Path $build 'CMakeCache.txt'))) {
-    Write-Host 'Configuring CMake (Visual Studio 2026)...' -ForegroundColor Cyan
-    & cmake -S $root -B $build -G 'Visual Studio 18 2026' -A x64
-    if ($LASTEXITCODE -ne 0) { Fail 'CMake configuration failed' }
-  }
+  # Reconfigure on every pull so new dependencies and assets are detected.
+  Write-Host 'Configuring CMake (Visual Studio 2026)...' -ForegroundColor Cyan
+  & cmake -S $root -B $build -G 'Visual Studio 18 2026' -A x64
+  if ($LASTEXITCODE -ne 0) { Fail 'CMake configuration failed' }
   Write-Host 'Building CoreModel...' -ForegroundColor Cyan
   & cmake --build $build --config Release --parallel 2
   if ($LASTEXITCODE -ne 0) { Fail 'Compilation failed; previous executable is preserved.' }
