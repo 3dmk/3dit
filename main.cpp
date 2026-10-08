@@ -322,10 +322,10 @@ if(inView && !drag.active){
  int hoveredAxis=handleHit(cursor);
  Color ink=hoveredAxis==0?RED:hoveredAxis==1?GREEN:hoveredAxis==2?BLUE:Color{230,236,245,230};
  DrawCircleLines((int)cursor.x,(int)cursor.y,7.0f,Color{12,18,25,210});
- DrawLineEx({cursor.x-13,cursor.y},{cursor.x-4,cursor.y},ink,1.5f);
- DrawLineEx({cursor.x+4,cursor.y},{cursor.x+13,cursor.y},ink,1.5f);
- DrawLineEx({cursor.x,cursor.y-13},{cursor.x,cursor.y-4},ink,1.5f);
- DrawLineEx({cursor.x,cursor.y+4},{cursor.x,cursor.y+13},ink,1.5f);
+ DrawLineEx({cursor.x-13,cursor.y},{cursor.x-4,cursor.y},1.5f,ink);
+ DrawLineEx({cursor.x+4,cursor.y},{cursor.x+13,cursor.y},1.5f,ink);
+ DrawLineEx({cursor.x,cursor.y-13},{cursor.x,cursor.y-4},1.5f,ink);
+ DrawLineEx({cursor.x,cursor.y+4},{cursor.x,cursor.y+13},1.5f,ink);
  DrawCircleV(cursor,1.5f,ink);
 }
 rlImGuiBegin();
