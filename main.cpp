@@ -296,7 +296,6 @@ void armTargetWeld(){
 }
 void applyTargetWeld(int destination){
  if(!targetWeldArmed)return;
- targetWeldArmed=false;
  if(mode!=1||selected!=targetWeldObject||!validComponent())return;
  auto& o=objects[selected];
  if(destination<0||destination>=(int)o.vertices.size()||targetWeldSource<0||targetWeldSource>=(int)o.vertices.size()||destination==targetWeldSource)return;
@@ -304,7 +303,15 @@ void applyTargetWeld(int destination){
  checkpoint();const int source=targetWeldSource;
  for(auto& f:o.faces)for(int& v:f)if(v==source)v=destination;
  cleanWeldedFaces(o);
- compactVertices(o);sub=-1;face=-1;
+ // Preserve the destination vertex index after compacting unused vertices.
+ std::set<int> surviving;
+ for(const auto& f:o.faces)for(int v:f)surviving.insert(v);
+ int nextSource=-1,index=0;
+ for(int v:surviving){if(v==destination)nextSource=index;index++;}
+ compactVertices(o);
+ targetWeldSource=nextSource;
+ if(nextSource<0)targetWeldArmed=false;
+ sub=nextSource;face=-1;
 }
 
 void pick(Vector2 mouse){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int best=-1,bf=-1;for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!hit.hit)hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(hit.hit&&hit.distance<nearest){nearest=hit.distance;best=oi;bf=fi;}}}}selected=best;face=bf;}
@@ -550,6 +557,7 @@ if(rectanglePending&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){
  rectanglePending=false;rectangleDragging=false;
 }
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
+if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)&&targetWeldArmed){targetWeldArmed=false;targetWeldSource=-1;targetWeldObject=-1;}
 if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)){
  Vector2 d=GetMouseDelta();Vector3 offset=Vector3Subtract(camera.position,camera.target);
  float radius=std::max(.5f,Vector3Length(offset));
@@ -775,7 +783,7 @@ if(ImGui::Begin("Editable Polygon")){
   operation("Extrude Vertex (Z+)",vertex,extrudeSelectedVertex);
   operation("Chamfer Vertex",vertex,chamferSelectedVertex);
   operation("Target Weld (click destination)",vertex,armTargetWeld);
-  if(targetWeldArmed)ImGui::TextColored(ImVec4(1.0f,.8f,.3f,1.0f),"Click the destination vertex in the viewport");
+  if(targetWeldArmed)ImGui::TextColored(ImVec4(1.0f,.8f,.3f,1.0f),"Target Weld active: click vertices; right-click to exit");
  }
  if(mode==2&&ImGui::CollapsingHeader("Edge###EdgeToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Split Edge",edge,splitSelectedEdge);
