@@ -1,5 +1,7 @@
 #include "raylib.h"
 #include "raymath.h"
+#include "imgui.h"
+#include "rlImGui.h"
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -134,13 +136,36 @@ void UiText(const char* value,int x,int y,int size,Color color){
  else DrawText(value,x,y,size,color);
 }
 int main(){SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);InitWindow(1280,760,"CoreModel Native v0.8 - C++23");SetTargetFPS(60);
+rlImGuiSetup(true);
+ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+ImGui::StyleColorsDark();
 if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFontLoaded=uiFont.texture.id!=0;}
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
-int connectFeedback=0;while(!WindowShouldClose()){if(connectFeedback>0)connectFeedback--;int w=GetScreenWidth(),h=GetScreenHeight();Rectangle left={0,42,185,(float)h-68},right={(float)w-230,42,230,(float)h-68};bool inView=GetMouseX()>185&&GetMouseX()<w-230&&GetMouseY()>42&&GetMouseY()<h-26;
-if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Z)){if(IsKeyDown(KEY_LEFT_SHIFT))redo();else undo();}if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Y))redo();
-if(IsKeyPressed(KEY_ONE)){mode=1;sub=-1;face=-1;}if(IsKeyPressed(KEY_TWO)){mode=2;sub=-1;face=-1;}if(IsKeyPressed(KEY_THREE)){mode=3;sub=-1;face=-1;}if(IsKeyPressed(KEY_ZERO)){mode=0;sub=-1;face=-1;}
-if(IsKeyPressed(KEY_W)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=1;if(IsKeyPressed(KEY_E)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=2;if(IsKeyPressed(KEY_R)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=3;
-if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){Vector2 m=GetMousePosition();if(m.y>=7&&m.y<36&&m.x>=w-190&&m.x<w-12){SetClipboardText(connectionPrompt);connectFeedback=180;}else if(m.y>=44&&m.y<=70&&m.x>=10&&m.x<180){int newMode=(int)((m.x-10)/43);if(newMode>=0&&newMode<=3){mode=newMode;sub=-1;face=-1;}}else if(m.x<185&&m.y>65){int row=(int)((m.y-75)/39);if(row>=0&&row<=2){checkpoint();objects.push_back(row==0?box():row==1?sphere():plane());selected=(int)objects.size()-1;face=-1;}else if(row==4)extrude();else if(row==5)inset();}else if(inView){int axis=handleHit(m);if(axis>=0)startDrag(axis);else if(mode==0){pick(m);sub=-1;}else pickComponent(m);}}
+int connectFeedback=0;
+while(!WindowShouldClose()){
+ if(connectFeedback>0)connectFeedback--;
+ int w=GetScreenWidth(),h=GetScreenHeight();
+ // Panels are Dear ImGui windows; the central 3D viewport stays raylib.
+ bool inView=!ImGui::GetIO().WantCaptureMouse;
+ bool typing=ImGui::GetIO().WantTextInput;
+ if(!typing){
+  if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Z)){if(IsKeyDown(KEY_LEFT_SHIFT))redo();else undo();}
+  if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Y))redo();
+  if(IsKeyPressed(KEY_ONE)){mode=1;sub=-1;face=-1;}
+  if(IsKeyPressed(KEY_TWO)){mode=2;sub=-1;face=-1;}
+  if(IsKeyPressed(KEY_THREE)){mode=3;sub=-1;face=-1;}
+  if(IsKeyPressed(KEY_ZERO)){mode=0;sub=-1;face=-1;}
+  if(IsKeyPressed(KEY_W)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=1;
+  if(IsKeyPressed(KEY_E)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=2;
+  if(IsKeyPressed(KEY_R)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=3;
+ }
+ if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+  Vector2 m=GetMousePosition();
+  int axis=handleHit(m);
+  if(axis>=0)startDrag(axis);
+  else if(mode==0){pick(m);sub=-1;}
+  else pickComponent(m);
+ }
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
 if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)){
  Vector2 d=GetMouseDelta();Vector3 offset=Vector3Subtract(camera.position,camera.target);
@@ -205,4 +230,60 @@ if(mode==1&&selected>=0&&selected<(int)objects.size()){
  }
  EndScissorMode();
 }
-DrawRectangle(0,0,w,42,{24,27,33,255});DrawLine(0,41,w,41,{57,65,77,255});UiText("CoreModel Native v0.8  |  C++23  |  Object: 0  Vertex: 1  Edge: 2  Face: 3",12,13,17,RAYWHITE);DrawRectangle(w-190,7,178,29,connectFeedback>0?Color{35,116,91,255}:Color{51,93,140,255});DrawRectangleLines(w-190,7,178,29,Color{115,142,171,255});UiText(connectFeedback>0?"COPIED TO CLIPBOARD":"COPY AI CONNECT",w-182,15,14,RAYWHITE);DrawRectangleRec(left,{29,33,40,255});for(int k=0;k<4;k++){int x=10+k*43;DrawRectangle(x,44,40,25,mode==k?Color{57,105,155,255}:Color{43,49,59,255});UiText(k==0?"OBJ":k==1?"VTX":k==2?"EDG":"FAC",x+5,51,12,RAYWHITE);}DrawRectangleRec(right,{29,33,40,255});DrawLine(185,42,185,h-26,{55,62,73,255});DrawLine(w-230,42,w-230,h-26,{55,62,73,255});const char* labels[]={"ADD BOX","ADD SPHERE","ADD PLANE","","EXTRUDE FACE","INSET FACE"};for(int i=0;i<6;i++)UiText(labels[i],15,80+i*39,16,i==3?GRAY:RAYWHITE);UiText("PROPERTIES",w-215,65,18,RAYWHITE);UiText(TextFormat("Tool: %s",tool==1?"MOVE":tool==2?"ROTATE":"SCALE"),w-215,88,14,LIGHTGRAY);if(selected>=0){auto&o=objects[selected];UiText(o.name.c_str(),w-215,104,19,GOLD);UiText(TextFormat("Vertices: %i",(int)o.vertices.size()),w-215,146,16,RAYWHITE);UiText(TextFormat("Faces: %i",(int)o.faces.size()),w-215,174,16,RAYWHITE);UiText(TextFormat("Position: %.2f %.2f %.2f",o.position.x,o.position.y,o.position.z),w-215,210,14,RAYWHITE);}DrawRectangle(0,h-26,w,26,{24,27,33,255});DrawLine(0,h-26,w,h-26,{57,65,77,255});UiText("RMB orbit + WASD/QE fly | MMB pan | Wheel zoom | F frame | Numpad 1/3/7 views | W/E/R tools | Ctrl+Z/Y",10,h-20,13,LIGHTGRAY);EndDrawing();}if(uiFontLoaded)UnloadFont(uiFont);CloseWindow();}
+rlImGuiBegin();
+// Dockable tool windows, with a transparent central node for the raylib scene.
+ImGuiViewport* viewport=ImGui::GetMainViewport();
+ImGui::DockSpaceOverViewport(0,viewport,ImGuiDockNodeFlags_PassthruCentralNode);
+ImGui::SetNextWindowPos(ImVec2(10,45),ImGuiCond_FirstUseEver);
+ImGui::SetNextWindowSize(ImVec2(205,385),ImGuiCond_FirstUseEver);
+if(ImGui::Begin("Modeling Tools")){
+ ImGui::TextUnformatted("Selection mode");
+ const char* names[]={"Object","Vertex","Edge","Face"};
+ for(int i=0;i<4;i++){
+  if(i)ImGui::SameLine();
+  if(ImGui::RadioButton(names[i],mode==i)){mode=i;sub=-1;face=-1;}
+ }
+ ImGui::Separator();
+ ImGui::TextUnformatted("Transform");
+ if(ImGui::RadioButton("Move",tool==1))tool=1;
+ ImGui::SameLine();if(ImGui::RadioButton("Rotate",tool==2))tool=2;
+ ImGui::SameLine();if(ImGui::RadioButton("Scale",tool==3))tool=3;
+ ImGui::Separator();
+ ImGui::TextUnformatted("Create");
+ if(ImGui::Button("Box",ImVec2(-1,0))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ if(ImGui::Button("Sphere",ImVec2(-1,0))){checkpoint();objects.push_back(sphere());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ if(ImGui::Button("Plane",ImVec2(-1,0))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ ImGui::Separator();
+ if(ImGui::Button("Extrude Face",ImVec2(-1,0)))extrude();
+ if(ImGui::Button("Inset Face",ImVec2(-1,0)))inset();
+}
+ImGui::End();
+ImGui::SetNextWindowPos(ImVec2((float)w-270,45),ImGuiCond_FirstUseEver);
+ImGui::SetNextWindowSize(ImVec2(260,340),ImGuiCond_FirstUseEver);
+if(ImGui::Begin("Properties")){
+ if(selected>=0&&selected<(int)objects.size()){
+  auto& o=objects[selected];
+  ImGui::Text("Object: %s",o.name.c_str());
+  ImGui::Text("Vertices: %d",(int)o.vertices.size());
+  ImGui::Text("Faces: %d",(int)o.faces.size());
+  ImGui::Separator();
+  float pos[3]={o.position.x,o.position.y,o.position.z};
+  if(ImGui::DragFloat3("Position",pos,0.05f)){
+   checkpoint();
+   o.position={pos[0],pos[1],pos[2]};
+  }
+  ImGui::Text("Selected vertex/edge: %d",sub);
+  ImGui::Text("Selected face: %d",face);
+ }else ImGui::TextUnformatted("No object selected.");
+}
+ImGui::End();
+ImGui::SetNextWindowPos(ImVec2(10,(float)h-145),ImGuiCond_FirstUseEver);
+ImGui::SetNextWindowSize(ImVec2(300,105),ImGuiCond_FirstUseEver);
+if(ImGui::Begin("CoreModel AI")){
+ if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
+ if(connectFeedback>0)ImGui::TextUnformatted("Connection request copied.");
+ ImGui::TextDisabled("GitHub workflow - local build required");
+}
+ImGui::End();
+rlImGuiEnd();
+EndDrawing();}rlImGuiShutdown();if(uiFontLoaded)UnloadFont(uiFont);CloseWindow();
