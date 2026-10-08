@@ -48,6 +48,7 @@ int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode
   if(tool==2){
    Vector3 u=i==0?Vector3{0,1,0}:Vector3{1,0,0};
    Vector3 v=i==2?Vector3{0,1,0}:Vector3{0,0,1};
+   // Z-up: blue Z rotation ring lies in the horizontal XY plane.
    float ringDistance=1.0e9f;
    for(int j=0;j<64;j++){
     float t0=6.2831853f*j/64.0f,t1=6.2831853f*(j+1)/64.0f;
@@ -275,6 +276,7 @@ if(selected>=0&&selected<(int)objects.size()){
   for(int axis=0;axis<3;axis++){
    Vector3 u=axis==0?Vector3{0,1,0}:Vector3{1,0,0};
    Vector3 v=axis==2?Vector3{0,1,0}:Vector3{0,0,1};
+   // Z-up: X/Y rings are vertical; the Z ring is horizontal.
    for(int j=0;j<64;j++){
     float t0=6.2831853f*j/64.0f,t1=6.2831853f*(j+1)/64.0f;
     Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f));
