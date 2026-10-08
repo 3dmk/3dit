@@ -675,7 +675,7 @@ if(ImGui::Begin("Modeling Tools")){
  bool vertex=mode==1&&validComponent()&&sub>=0&&sub<(int)objects[selected].vertices.size();
  bool edge=mode==2&&validComponent()&&sub>=0;
  bool polygon=mode==3&&validComponent()&&face>=0&&face<(int)objects[selected].faces.size();
- if(ImGui::CollapsingHeader("Vertex",ImGuiTreeNodeFlags_DefaultOpen)){
+ if(ImGui::CollapsingHeader("Vertex###VertexToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   ImGui::BeginDisabled(!vertex);if(ImGui::Button("Move Vertex (W)",ImVec2(-1,0)))tool=1;ImGui::EndDisabled();
   operation("Weld Nearest",vertex,weldSelectedVertex);
   operation("Remove Vertex",vertex,removeSelectedVertex);
@@ -684,7 +684,7 @@ if(ImGui::Begin("Modeling Tools")){
   operation("Chamfer Vertex",vertex,chamferSelectedVertex);
   ImGui::BeginDisabled();ImGui::Button("Target Weld",ImVec2(-1,0));ImGui::EndDisabled();
  }
- if(ImGui::CollapsingHeader("Edge",ImGuiTreeNodeFlags_DefaultOpen)){
+ if(ImGui::CollapsingHeader("Edge###EdgeToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Split Edge",edge,splitSelectedEdge);
   operation("Remove Edge (merge faces)",edge,removeSelectedEdge);
   operation("Turn Edge (triangles)",edge,turnSelectedEdge);
@@ -699,7 +699,7 @@ if(ImGui::Begin("Modeling Tools")){
   operation("Extend Boundary",closedLoop,extendBoundary);
   ImGui::BeginDisabled();ImGui::Button("Select Open Edge Loop",ImVec2(-1,0));ImGui::Button("Bridge Borders",ImVec2(-1,0));ImGui::EndDisabled();
  }
- if(ImGui::CollapsingHeader("Polygon",ImGuiTreeNodeFlags_DefaultOpen)){
+ if(ImGui::CollapsingHeader("Polygon###PolygonToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Extrude Polygon",polygon,extrude);
   operation("Inset Polygon",polygon,inset);
   operation("Bevel Polygon",polygon,bevelSelectedPolygon);
