@@ -184,7 +184,7 @@ for(int g=-20;g<=20;g++){
 }
 DrawLine3D({0,0,0},{2,0,0},RED);DrawLine3D({0,0,0},{0,2,0},GREEN);
 for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&fi==face&&mode==3)?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&fi==face&&mode==3)?Color{255,92,92,255}:Color{78,82,88,255});}if(oi==selected){Vector3 p=pivot(o);if(mode==0||!active(o).empty()){DrawLine3D(p,Vector3Add(p,{1.6f,0,0}),RED);DrawLine3D(p,Vector3Add(p,{0,1.6f,0}),GREEN);DrawLine3D(p,Vector3Add(p,{0,0,1.6f}),BLUE);
- if(mode==2){auto e=edges(o);for(int k=0;k<(int)e.size();k++)DrawLine3D(world(o,e[k].first),world(o,e[k].second),k==sub?ORANGE:Color{155,205,230,255});}
+ if(mode==2){auto e=edges(o);for(int k=0;k<(int)e.size();k++)DrawLine3D(world(o,e[k].first),world(o,e[k].second),k==sub?Color{255,65,65,255}:Color{120,125,132,255});}
  DrawSphere(Vector3Add(p,{1.35f,0,0}),.09f,RED);DrawSphere(Vector3Add(p,{0,1.35f,0}),.09f,GREEN);DrawSphere(Vector3Add(p,{0,0,1.35f}),.09f,BLUE);} }}
 EndMode3D();
 // Screen-space vertex markers: fixed pixel radius regardless of camera zoom.
