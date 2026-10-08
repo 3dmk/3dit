@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <map>
 #include <utility>
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};};
 struct Snapshot {std::vector<MeshObject> objects;int selected,face,sub;};
@@ -107,6 +108,70 @@ void outlineSelectedFace(){
  for(int v:old){outer.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Add(center,Vector3Scale(Vector3Subtract(o.vertices[v],center),1.2f)));}
  for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],outer[(i+1)%outer.size()],outer[i]});
  o.faces[face]=outer;
+}
+
+
+std::vector<std::pair<int,int>> boundaryEdges(const MeshObject& o){
+ std::map<std::pair<int,int>,int> count;
+ for(const auto& f:o.faces)for(size_t i=0;i<f.size();i++){
+  int a=f[i],b=f[(i+1)%f.size()];if(a>b)std::swap(a,b);count[{a,b}]++;
+ }
+ std::vector<std::pair<int,int>> result;
+ for(const auto& item:count)if(item.second==1)result.push_back(item.first);
+ return result;
+}
+bool selectedBoundaryEdge(int& a,int& b){
+ if(mode!=2||!validComponent())return false;
+ auto all=edges(objects[selected]);if(sub<0||sub>=(int)all.size())return false;
+ a=all[sub].first;b=all[sub].second;
+ auto boundary=boundaryEdges(objects[selected]);
+ return std::find(boundary.begin(),boundary.end(),std::make_pair(a,b))!=boundary.end();
+}
+std::vector<int> selectedBoundaryLoop(){
+ int a,b;if(!selectedBoundaryEdge(a,b))return {};
+ auto boundary=boundaryEdges(objects[selected]);
+ std::map<int,std::vector<int>> neighbors;
+ for(auto [x,y]:boundary){neighbors[x].push_back(y);neighbors[y].push_back(x);}
+ if(neighbors[a].size()!=2||neighbors[b].size()!=2)return {};
+ std::vector<int> loop{a,b};int previous=a,current=b;
+ for(size_t step=0;step<=boundary.size();step++){
+  if(neighbors[current].size()!=2)return {};
+  int next=neighbors[current][0]==previous?neighbors[current][1]:neighbors[current][0];
+  if(next==a)return loop.size()>=3?loop:std::vector<int>{};
+  if(std::find(loop.begin(),loop.end(),next)!=loop.end())return {};
+  loop.push_back(next);previous=current;current=next;
+ }
+ return {};
+}
+void capBoundary(){
+ auto loop=selectedBoundaryLoop();if(loop.empty())return;
+ checkpoint();std::reverse(loop.begin(),loop.end());objects[selected].faces.push_back(loop);sub=-1;face=-1;
+}
+void extendBoundary(){
+ auto loop=selectedBoundaryLoop();if(loop.empty())return;
+ auto& o=objects[selected];Vector3 center{};
+ for(int v:loop)center=Vector3Add(center,o.vertices[v]);
+ center=Vector3Scale(center,1.0f/loop.size());
+ checkpoint();std::vector<int> outer;
+ for(int v:loop){
+  Vector3 direction=Vector3Subtract(o.vertices[v],center);
+  outer.push_back((int)o.vertices.size());
+  o.vertices.push_back(Vector3Add(o.vertices[v],Vector3Scale(direction,.25f)));
+ }
+ for(size_t i=0;i<loop.size();i++)o.faces.push_back({loop[i],loop[(i+1)%loop.size()],outer[(i+1)%loop.size()],outer[i]});
+ sub=-1;face=-1;
+}
+void extrudeSelectedVertex(){
+ if(mode!=1||!validComponent())return;auto& o=objects[selected];
+ if(sub<0||sub>=(int)o.vertices.size())return;
+ checkpoint();Vector3 p=o.vertices[sub];o.vertices.push_back(Vector3Add(p,Vector3{0,0,.5f}));sub=(int)o.vertices.size()-1;
+}
+void extrudeSelectedEdge(){
+ int a,b;if(!selectedBoundaryEdge(a,b))return;auto& o=objects[selected];
+ Vector3 pa=o.vertices[a],pb=o.vertices[b];
+ checkpoint();int c=(int)o.vertices.size();o.vertices.push_back(Vector3Add(pa,Vector3{0,0,.5f}));
+ int d=(int)o.vertices.size();o.vertices.push_back(Vector3Add(pb,Vector3{0,0,.5f}));
+ o.faces.push_back({a,b,d,c});sub=-1;face=-1;
 }
 
 void pick(Vector2 mouse){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int best=-1,bf=-1;for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!hit.hit)hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(hit.hit&&hit.distance<nearest){nearest=hit.distance;best=oi;bf=fi;}}}}selected=best;face=bf;}
@@ -523,16 +588,22 @@ if(ImGui::Begin("Modeling Tools")){
   operation("Weld Nearest",vertex,weldSelectedVertex);
   operation("Remove Vertex",vertex,removeSelectedVertex);
   operation("Break Vertex",vertex,breakSelectedVertex);
-  ImGui::BeginDisabled();ImGui::Button("Target Weld",ImVec2(-1,0));ImGui::Button("Chamfer Vertex",ImVec2(-1,0));ImGui::Button("Extrude Vertex",ImVec2(-1,0));ImGui::Button("Connect Vertices",ImVec2(-1,0));ImGui::EndDisabled();
+  operation("Extrude Vertex (Z+)",vertex,extrudeSelectedVertex);
+  ImGui::BeginDisabled();ImGui::Button("Target Weld",ImVec2(-1,0));ImGui::Button("Chamfer Vertex",ImVec2(-1,0));ImGui::Button("Connect Vertices",ImVec2(-1,0));ImGui::EndDisabled();
  }
  if(ImGui::CollapsingHeader("Edge",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Split Edge",edge,splitSelectedEdge);
   operation("Remove Edge (merge faces)",edge,removeSelectedEdge);
-  ImGui::BeginDisabled();ImGui::Button("Connect Edges",ImVec2(-1,0));ImGui::Button("Chamfer Edge",ImVec2(-1,0));ImGui::Button("Bridge Edges",ImVec2(-1,0));ImGui::Button("Extrude Edge",ImVec2(-1,0));ImGui::Button("Turn Edge",ImVec2(-1,0));ImGui::EndDisabled();
+  int boundaryA=0,boundaryB=0;bool boundary=edge&&selectedBoundaryEdge(boundaryA,boundaryB);
+  operation("Extrude Boundary Edge (Z+)",boundary,extrudeSelectedEdge);
+  ImGui::BeginDisabled();ImGui::Button("Connect Edges",ImVec2(-1,0));ImGui::Button("Chamfer Edge",ImVec2(-1,0));ImGui::Button("Bridge Edges",ImVec2(-1,0));ImGui::Button("Turn Edge",ImVec2(-1,0));ImGui::EndDisabled();
  }
  if(ImGui::CollapsingHeader("Border",ImGuiTreeNodeFlags_DefaultOpen)){
-  ImGui::TextDisabled("Open boundary editing");
-  ImGui::BeginDisabled();ImGui::Button("Select Open Edge Loop",ImVec2(-1,0));ImGui::Button("Cap Hole",ImVec2(-1,0));ImGui::Button("Bridge Borders",ImVec2(-1,0));ImGui::Button("Extend Boundary",ImVec2(-1,0));ImGui::EndDisabled();
+  ImGui::TextDisabled("Select a boundary edge in Edge mode");
+  bool closedLoop=!selectedBoundaryLoop().empty();
+  operation("Cap Hole",closedLoop,capBoundary);
+  operation("Extend Boundary",closedLoop,extendBoundary);
+  ImGui::BeginDisabled();ImGui::Button("Select Open Edge Loop",ImVec2(-1,0));ImGui::Button("Bridge Borders",ImVec2(-1,0));ImGui::EndDisabled();
  }
  if(ImGui::CollapsingHeader("Polygon",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Extrude Polygon",polygon,extrude);
