@@ -315,7 +315,7 @@ if(mode==1&&selected>=0&&selected<(int)objects.size()){
   Vector2 screen=GetWorldToScreen(point,camera);
   if(screen.x<186||screen.x>w-231||screen.y<43||screen.y>h-27)continue;
   const bool chosen=i==sub;
-  DrawCircleV(screen,chosen?5.0f:3.5f,chosen?Color{255,72,72,255}:Color{220,63,63,255});
+  DrawCircleV(screen,chosen?5.0f:3.5f,chosen?Color{255,72,72,255}:Color{55,145,255,255});
   if(chosen)DrawCircleLines((int)screen.x,(int)screen.y,6.0f,Color{255,225,225,255});
  }
  EndScissorMode();
