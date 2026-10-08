@@ -32,8 +32,12 @@ try {
   }
   $dirty = @(& git.exe status --porcelain --untracked-files=no)
   if ($LASTEXITCODE -ne 0) { throw 'Git status failed.' }
-  if ($dirty.Count -gt 0) { throw 'Local tracked changes exist. Commit or stash them before updating.' }
-  Step 'Downloading updates from GitHub' 'git.exe' @('pull','--ff-only','origin','main')
+  if ($dirty.Count -gt 0) {
+    Status 'Local source edits detected: skipping Git pull to avoid overwriting them.'
+    Status 'Building current local source; GitHub sync can resume after edits are committed or restored.'
+  } else {
+    Step 'Downloading updates from GitHub' 'git.exe' @('pull','--ff-only','origin','main')
+  }
   Status 'GitHub source is up to date; CMake will rebuild only changed targets'
   if (Test-Path (Join-Path $build 'CMakeCache.txt')) {
     Step 'Configuring CMake (existing build)' 'cmake.exe' @('-S',$root,'-B',$build)
@@ -46,7 +50,7 @@ try {
   Status 'Build completed. Starting the executable directly (not Visual Studio).'
   # Run the executable with PowerShell's call operator, matching the known-working command.
   # A successful build is a candidate; do not overwrite an existing KnownGood here.
-  Set-Location -LiteralPath (Split-Path -Parent $exe)
+  Set-Location -LiteralPath $root
   & $exe
   $editorExit = $LASTEXITCODE
   if ($null -ne $editorExit -and $editorExit -ne 0) { throw "CoreModel.exe exited with code $editorExit" }
