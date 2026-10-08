@@ -42,12 +42,33 @@ function Fail([string]$message) {
 }
 function Run-Step([string]$label, [string]$command, [string[]]$arguments) {
   ("===== {0} =====" -f $label) | Out-File -FilePath $log -Append -Encoding utf8
-  $stdoutFile = Join-Path $env:TEMP 'coremodel-launch-stdout.log'
-  $stderrFile = Join-Path $env:TEMP 'coremodel-launch-stderr.log'
+  $stdoutFile = [System.IO.Path]::GetTempFileName()
+  $stderrFile = [System.IO.Path]::GetTempFileName()
   try {
-    $process = Start-Process -FilePath $command -ArgumentList $arguments -WorkingDirectory $root -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile -ErrorAction Stop
-    if (Test-Path $stdoutFile) { Get-Content $stdoutFile | Out-File -FilePath $log -Append -Encoding utf8 }
-    if (Test-Path $stderrFile) { Get-Content $stderrFile | Out-File -FilePath $log -Append -Encoding utf8 }
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = (Get-Command $command -ErrorAction Stop).Source
+    $startInfo.WorkingDirectory = $root
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    # ProcessStartInfo.Arguments is one command-line string on Windows PowerShell 5.1.
+    # Quote each argument independently, preserving generator names and paths with spaces.
+    $quoted = foreach ($arg in $arguments) {
+      if ($arg -match '[\s"]') { '"' + ($arg -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+      else { $arg }
+    }
+    $startInfo.Arguments = ($quoted -join ' ')
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { Fail "$label could not start" }
+    $outTask = $process.StandardOutput.ReadToEndAsync()
+    $errTask = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    [System.IO.File]::WriteAllText($stdoutFile,$outTask.Result)
+    [System.IO.File]::WriteAllText($stderrFile,$errTask.Result)
+    Get-Content $stdoutFile | Out-File -FilePath $log -Append -Encoding utf8
+    Get-Content $stderrFile | Out-File -FilePath $log -Append -Encoding utf8
     if ($process.ExitCode -ne 0) { Fail "$label failed (exit code $($process.ExitCode))" }
   } finally {
     Remove-Item $stdoutFile,$stderrFile -Force -ErrorAction SilentlyContinue
