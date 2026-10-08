@@ -122,7 +122,7 @@ std::vector<std::pair<int,int>> boundaryEdges(const MeshObject& o){
  return result;
 }
 bool selectedBoundaryEdge(int& a,int& b){
- if(mode!=2||!validComponent())return false;
+ if((mode!=2&&mode!=4)||!validComponent())return false;
  auto all=edges(objects[selected]);if(sub<0||sub>=(int)all.size())return false;
  a=all[sub].first;b=all[sub].second;
  auto boundary=boundaryEdges(objects[selected]);
@@ -277,7 +277,7 @@ std::vector<std::pair<int,int>> edges(const MeshObject& o){
 }
 std::vector<int> active(const MeshObject& o){
  if(mode==1&&sub>=0&&sub<(int)o.vertices.size())return {sub};
- if(mode==2){auto e=edges(o);if(sub>=0&&sub<(int)e.size())return {e[sub].first,e[sub].second};}
+ if(mode==2||mode==4){auto e=edges(o);if(sub>=0&&sub<(int)e.size())return {e[sub].first,e[sub].second};}
  if(mode==3&&face>=0&&face<(int)o.faces.size())return o.faces[face];
  return {};
 }
@@ -323,7 +323,7 @@ void pickComponent(Vector2 mouse){
   float d=Vector2Distance(mouse,GetWorldToScreen(world(o,i),camera));
   if(d<best){best=d;sub=i;}
  }}
- else if(mode==2){auto e=edges(o);for(int i=0;i<(int)e.size();i++){
+ else if(mode==2||mode==4){auto e=edges(o);for(int i=0;i<(int)e.size();i++){
   float d=segmentDistance(mouse,GetWorldToScreen(world(o,e[i].first),camera),GetWorldToScreen(world(o,e[i].second),camera));
   if(d<best){best=d;sub=i;}
  }}
@@ -334,7 +334,7 @@ void pickComponent(Vector2 mouse){
    float d=Vector2Distance(mouse,GetWorldToScreen(world(old,i),camera));
    if(d<distance){distance=d;selected=prior;sub=i;}
   }
-  if(mode==2){auto e=edges(old);for(int i=0;i<(int)e.size();i++){
+  if(mode==2||mode==4){auto e=edges(old);for(int i=0;i<(int)e.size();i++){
    float d=segmentDistance(mouse,GetWorldToScreen(world(old,e[i].first),camera),GetWorldToScreen(world(old,e[i].second),camera));
    if(d<distance){distance=d;selected=prior;sub=i;}
   }}
@@ -454,6 +454,7 @@ while(!WindowShouldClose()){
   if(IsKeyPressed(KEY_ONE)){mode=1;sub=-1;face=-1;}
   if(IsKeyPressed(KEY_TWO)){mode=2;sub=-1;face=-1;}
   if(IsKeyPressed(KEY_THREE)){mode=3;sub=-1;face=-1;}
+  if(IsKeyPressed(KEY_FOUR)){mode=4;sub=-1;face=-1;}
   if(IsKeyPressed(KEY_ZERO)){mode=0;sub=-1;face=-1;}
   if(IsKeyPressed(KEY_W)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=1;
   if(IsKeyPressed(KEY_E)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=2;
@@ -624,7 +625,7 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGuiID right=ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.23f,nullptr,&center);
  ImGuiID bottomLeft=left;
  ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
- ImGui::DockBuilderDockWindow("Modeling Tools",topLeft);
+ ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
  ImGui::DockBuilderDockWindow("Properties",right);
  ImGui::DockBuilderDockWindow("CoreModel AI",right);
@@ -662,10 +663,11 @@ ImGui::End();
 ImGui::PopStyleVar();
 
 
-if(ImGui::Begin("Modeling Tools")){
+if(ImGui::Begin("Editable Polygon")){
  ImGui::TextUnformatted("Selection mode");
- const char* names[]={"Object","Vertex","Edge","Polygon"};
- for(int i=0;i<4;i++){if(i)ImGui::SameLine();if(ImGui::RadioButton(names[i],mode==i)){mode=i;sub=-1;face=-1;}}
+ const char* names[]={"Object","Vertex","Edge","Border","Polygon"};
+ const int subModes[]={0,1,2,4,3};
+ for(int i=0;i<5;i++){if(i==3)ImGui::NewLine();else if(i)ImGui::SameLine();if(ImGui::RadioButton(names[i],mode==subModes[i])){mode=subModes[i];sub=-1;face=-1;}}
  ImGui::Separator();
  auto operation=[&](const char* label,bool available,void(*fn)()){
   ImGui::BeginDisabled(!available);
@@ -674,8 +676,9 @@ if(ImGui::Begin("Modeling Tools")){
  };
  bool vertex=mode==1&&validComponent()&&sub>=0&&sub<(int)objects[selected].vertices.size();
  bool edge=mode==2&&validComponent()&&sub>=0;
+ bool border=mode==4&&validComponent()&&sub>=0;
  bool polygon=mode==3&&validComponent()&&face>=0&&face<(int)objects[selected].faces.size();
- if(ImGui::CollapsingHeader("Vertex###VertexToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
+ if(mode==1&&ImGui::CollapsingHeader("Vertex###VertexToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   ImGui::BeginDisabled(!vertex);if(ImGui::Button("Move Vertex (W)",ImVec2(-1,0)))tool=1;ImGui::EndDisabled();
   operation("Weld Nearest",vertex,weldSelectedVertex);
   operation("Remove Vertex",vertex,removeSelectedVertex);
@@ -684,7 +687,7 @@ if(ImGui::Begin("Modeling Tools")){
   operation("Chamfer Vertex",vertex,chamferSelectedVertex);
   ImGui::BeginDisabled();ImGui::Button("Target Weld",ImVec2(-1,0));ImGui::EndDisabled();
  }
- if(ImGui::CollapsingHeader("Edge###EdgeToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
+ if(mode==2&&ImGui::CollapsingHeader("Edge###EdgeToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Split Edge",edge,splitSelectedEdge);
   operation("Remove Edge (merge faces)",edge,removeSelectedEdge);
   operation("Turn Edge (triangles)",edge,turnSelectedEdge);
@@ -692,14 +695,14 @@ if(ImGui::Begin("Modeling Tools")){
   operation("Extrude Boundary Edge (Z+)",boundary,extrudeSelectedEdge);
   ImGui::BeginDisabled();ImGui::Button("Connect Edges",ImVec2(-1,0));ImGui::Button("Chamfer Edge",ImVec2(-1,0));ImGui::Button("Bridge Edges",ImVec2(-1,0));ImGui::EndDisabled();
  }
- if(ImGui::CollapsingHeader("Border",ImGuiTreeNodeFlags_DefaultOpen)){
-  ImGui::TextDisabled("Select a boundary edge in Edge mode");
-  bool closedLoop=!selectedBoundaryLoop().empty();
+ if(mode==4&&ImGui::CollapsingHeader("Border###BorderToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
+  ImGui::TextDisabled("Select a boundary edge to edit its loop");
+  bool closedLoop=border&&!selectedBoundaryLoop().empty();
   operation("Cap Hole",closedLoop,capBoundary);
   operation("Extend Boundary",closedLoop,extendBoundary);
   ImGui::BeginDisabled();ImGui::Button("Select Open Edge Loop",ImVec2(-1,0));ImGui::Button("Bridge Borders",ImVec2(-1,0));ImGui::EndDisabled();
  }
- if(ImGui::CollapsingHeader("Polygon###PolygonToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
+ if(mode==3&&ImGui::CollapsingHeader("Polygon###PolygonToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Extrude Polygon",polygon,extrude);
   operation("Inset Polygon",polygon,inset);
   operation("Bevel Polygon",polygon,bevelSelectedPolygon);
@@ -710,7 +713,8 @@ if(ImGui::Begin("Modeling Tools")){
   operation("Connect Polygon Vertices (split)",polygon,connectSelectedFaceVertices);
   ImGui::BeginDisabled();ImGui::Button("Bridge Polygons",ImVec2(-1,0));ImGui::EndDisabled();
  }
- ImGui::TextDisabled("Unavailable operations are disabled until implemented.");
+ if(mode==0)ImGui::TextDisabled("Choose a sub-object mode to edit the mesh.");
+ else ImGui::TextDisabled("Unavailable operations are disabled until implemented.");
 }
 ImGui::End();
 
