@@ -319,8 +319,27 @@ if(mode==1&&selected>=0&&selected<(int)objects.size()){
  }
  EndScissorMode();
 }
-// Screen-space cursor crosshair: always above scene geometry, but below UI panels.
+// Show the precision crosshair only while hovering over a scene actor or transform gizmo.
+bool cursorOnActor=false;
 if(inView && !drag.active){
+ Ray hoverRay=GetScreenToWorldRay(GetMousePosition(),camera);
+ float closest=1.0e20f;
+ for(const auto& actor:objects){
+  for(const auto& polygon:actor.faces){
+   if(polygon.size()<3)continue;
+   for(size_t j=1;j+1<polygon.size();j++){
+    Vector3 a=world(actor,polygon[0]);
+    Vector3 b=world(actor,polygon[j]);
+    Vector3 c=world(actor,polygon[j+1]);
+    RayCollision hit=GetRayCollisionTriangle(hoverRay,a,b,c);
+    if(!hit.hit)hit=GetRayCollisionTriangle(hoverRay,a,c,b);
+    if(hit.hit && hit.distance<closest){closest=hit.distance;cursorOnActor=true;}
+   }
+  }
+ }
+}
+// Screen-space cursor crosshair: always above scene geometry, but below UI panels.
+if(inView && !drag.active && (cursorOnActor || handleHit(GetMousePosition())>=0)){
  Vector2 cursor=GetMousePosition();
  int hoveredAxis=handleHit(cursor);
  Color ink=hoveredAxis==0?RED:hoveredAxis==1?GREEN:hoveredAxis==2?BLUE:Color{230,236,245,230};
