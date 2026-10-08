@@ -136,6 +136,38 @@ void UiText(const char* value,int x,int y,int size,Color color){
  if(uiFontLoaded)DrawTextEx(uiFont,value,{(float)x,(float)y},(float)size,1.0f,color);
  else DrawText(value,x,y,size,color);
 }
+// Compact transform icons drawn with ImGui primitives, no external image assets.
+bool TransformIconButton(const char* id,int kind,bool active){
+ ImGui::PushID(id);
+ ImVec2 p=ImGui::GetCursorScreenPos();
+ const ImVec2 size(37,34);
+ bool clicked=ImGui::InvisibleButton("##icon",size);
+ bool hovered=ImGui::IsItemHovered();
+ ImDrawList* dl=ImGui::GetWindowDrawList();
+ ImU32 bg=ImGui::GetColorU32(active?ImVec4(.23f,.42f,.62f,1.0f):hovered?ImVec4(.27f,.30f,.35f,1.0f):ImVec4(.15f,.18f,.22f,.95f));
+ ImU32 fg=IM_COL32(229,234,241,255);
+ dl->AddRectFilled(p,ImVec2(p.x+size.x,p.y+size.y),bg,5.0f);
+ dl->AddRect(p,ImVec2(p.x+size.x,p.y+size.y),active?IM_COL32(114,183,255,255):IM_COL32(82,91,104,255),5.0f);
+ ImVec2 c(p.x+18.5f,p.y+17.0f);
+ if(kind==1){ // Move: four directional arrows
+  dl->AddLine(ImVec2(c.x-10,c.y),ImVec2(c.x+10,c.y),fg,2);
+  dl->AddLine(ImVec2(c.x,c.y-10),ImVec2(c.x,c.y+10),fg,2);
+  dl->AddTriangleFilled(ImVec2(c.x,c.y-13),ImVec2(c.x-4,c.y-7),ImVec2(c.x+4,c.y-7),fg);
+  dl->AddTriangleFilled(ImVec2(c.x,c.y+13),ImVec2(c.x-4,c.y+7),ImVec2(c.x+4,c.y+7),fg);
+  dl->AddTriangleFilled(ImVec2(c.x-13,c.y),ImVec2(c.x-7,c.y-4),ImVec2(c.x-7,c.y+4),fg);
+  dl->AddTriangleFilled(ImVec2(c.x+13,c.y),ImVec2(c.x+7,c.y-4),ImVec2(c.x+7,c.y+4),fg);
+ }else if(kind==2){ // Rotate: circular arrow
+  dl->PathArcTo(c,10.0f,-2.6f,2.2f,24);dl->PathStroke(fg,0,2.1f);
+  dl->AddTriangleFilled(ImVec2(c.x-7,c.y+10),ImVec2(c.x-12,c.y+3),ImVec2(c.x-3,c.y+4),fg);
+ }else{ // Scale: diagonal expansion
+  dl->AddLine(ImVec2(c.x-8,c.y+8),ImVec2(c.x+8,c.y-8),fg,2.2f);
+  dl->AddRect(ImVec2(c.x-12,c.y+5),ImVec2(c.x-5,c.y+12),fg,0,0,1.8f);
+  dl->AddRectFilled(ImVec2(c.x+5,c.y-12),ImVec2(c.x+12,c.y-5),fg);
+ }
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("%s (%s)",kind==1?"Move":kind==2?"Rotate":"Scale",kind==1?"W":kind==2?"E":"R");
+ ImGui::PopID();
+ return clicked;
+}
 int main(){SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);InitWindow(1280,760,"CoreModel Native v0.8 - C++23");SetTargetFPS(60);
 rlImGuiSetup(true);
 ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -144,11 +176,12 @@ if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFont
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
 int connectFeedback=0;
 bool showProperties=true,showAI=true;
+Rectangle transformToolbarBounds={0,0,0,0};
 while(!WindowShouldClose()){
  if(connectFeedback>0)connectFeedback--;
  int w=GetScreenWidth(),h=GetScreenHeight();
  // Panels are Dear ImGui windows; the central 3D viewport stays raylib.
- bool inView=!ImGui::GetIO().WantCaptureMouse;
+ bool inView=!ImGui::GetIO().WantCaptureMouse && !CheckCollisionPointRec(GetMousePosition(),transformToolbarBounds);
  bool typing=ImGui::GetIO().WantTextInput;
  if(!typing){
   if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Z)){if(IsKeyDown(KEY_LEFT_SHIFT))redo();else undo();}
@@ -265,6 +298,29 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
 }
 ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
 ImGui::End();
+// Viewport overlay: icon buttons stay anchored to the central dock node.
+ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId);
+ImVec2 toolPos=central?central->Pos:dockPos;
+ImVec2 toolSize=central?central->Size:dockSize;
+const float barWidth=139.0f;
+ImGui::SetNextWindowPos(ImVec2(toolPos.x+ImMax(4.0f,(toolSize.x-barWidth)*.5f),toolPos.y+9.0f),ImGuiCond_Always);
+ImGui::SetNextWindowSize(ImVec2(barWidth,48),ImGuiCond_Always);
+const ImGuiWindowFlags overlayFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
+ ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoSavedSettings|
+ ImGuiWindowFlags_NoDocking|ImGuiWindowFlags_NoNav;
+ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(8,7));
+ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,7.0f);
+if(ImGui::Begin("##ViewportTransformTools",nullptr,overlayFlags)){
+ if(TransformIconButton("MoveIcon",1,tool==1))tool=1;
+ ImGui::SameLine(0,4);
+ if(TransformIconButton("RotateIcon",2,tool==2))tool=2;
+ ImGui::SameLine(0,4);
+ if(TransformIconButton("ScaleIcon",3,tool==3))tool=3;
+}
+transformToolbarBounds={(float)ImGui::GetWindowPos().x,(float)ImGui::GetWindowPos().y,
+ (float)ImGui::GetWindowSize().x,(float)ImGui::GetWindowSize().y};
+ImGui::End();
+ImGui::PopStyleVar(2);
 const ImGuiWindowFlags toolbarFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
  ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoDocking;
 ImGui::SetNextWindowPos(viewport->Pos,ImGuiCond_Always);
