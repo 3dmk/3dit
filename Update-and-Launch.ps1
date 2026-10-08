@@ -34,6 +34,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Git status failed.' }
   if ($dirty.Count -gt 0) { throw 'Local tracked changes exist. Commit or stash them before updating.' }
   Step 'Downloading updates from GitHub' 'git.exe' @('pull','--ff-only','origin','main')
+  Status 'GitHub source is up to date; CMake will rebuild only changed targets'
   if (Test-Path (Join-Path $build 'CMakeCache.txt')) {
     Step 'Configuring CMake (existing build)' 'cmake.exe' @('-S',$root,'-B',$build)
   } else {
@@ -42,6 +43,7 @@ try {
   Step 'Building CoreModel Release' 'cmake.exe' @('--build',$build,'--config','Release','--parallel','2')
   if (-not (Test-Path $exe)) { throw "Build finished but executable is missing: $exe" }
   New-Item -ItemType Directory -Force -Path (Split-Path $knownGood) | Out-Null
+  Status 'Build successful; preserving validated executable as KnownGood candidate'
   Copy-Item -LiteralPath $exe -Destination $knownGood -Force
   Status 'Launching CoreModel.exe'
   Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -ErrorAction Stop
