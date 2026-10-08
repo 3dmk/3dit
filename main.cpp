@@ -195,6 +195,7 @@ if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFont
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
 int connectFeedback=0;
 bool showProperties=true,showAI=true;
+bool crosshairCursorHidden=false;
 
 while(!WindowShouldClose()){
  if(connectFeedback>0)connectFeedback--;
@@ -339,7 +340,10 @@ if(inView && !drag.active){
  }
 }
 // Screen-space cursor crosshair: always above scene geometry, but below UI panels.
-if(inView && !drag.active && (cursorOnActor || handleHit(GetMousePosition())>=0)){
+bool showCrosshair=inView && !drag.active && (cursorOnActor || handleHit(GetMousePosition())>=0);
+if(showCrosshair && !crosshairCursorHidden){HideCursor();crosshairCursorHidden=true;}
+else if(!showCrosshair && crosshairCursorHidden){ShowCursor();crosshairCursorHidden=false;}
+if(showCrosshair){
  Vector2 cursor=GetMousePosition();
  int hoveredAxis=handleHit(cursor);
  Color ink=hoveredAxis==0?RED:hoveredAxis==1?GREEN:hoveredAxis==2?BLUE:Color{230,236,245,230};
@@ -467,6 +471,7 @@ ImGui::End();
 rlImGuiEnd();
 EndDrawing();
 }
+if(crosshairCursorHidden)ShowCursor();
 rlImGuiShutdown();
 if(uiFontLoaded)UnloadFont(uiFont);
 CloseWindow();
