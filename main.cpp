@@ -176,12 +176,12 @@ if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFont
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
 int connectFeedback=0;
 bool showProperties=true,showAI=true;
-Rectangle transformToolbarBounds={0,0,0,0};
+
 while(!WindowShouldClose()){
  if(connectFeedback>0)connectFeedback--;
  int w=GetScreenWidth(),h=GetScreenHeight();
  // Panels are Dear ImGui windows; the central 3D viewport stays raylib.
- bool inView=!ImGui::GetIO().WantCaptureMouse && !CheckCollisionPointRec(GetMousePosition(),transformToolbarBounds);
+ bool inView=!ImGui::GetIO().WantCaptureMouse && GetMousePosition().y>44.0f;
  bool typing=ImGui::GetIO().WantTextInput;
  if(!typing){
   if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Z)){if(IsKeyDown(KEY_LEFT_SHIFT))redo();else undo();}
@@ -298,37 +298,25 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
 }
 ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
 ImGui::End();
-// Viewport overlay: icon buttons stay anchored to the central dock node.
-ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId);
-ImVec2 toolPos=central?central->Pos:dockPos;
-ImVec2 toolSize=central?central->Size:dockSize;
-const float barWidth=139.0f; // Three transform gizmo modes
-ImGui::SetNextWindowPos(ImVec2(toolPos.x+ImMax(4.0f,(toolSize.x-barWidth)*.5f),toolPos.y+9.0f),ImGuiCond_Always);
-ImGui::SetNextWindowSize(ImVec2(barWidth,48),ImGuiCond_Always);
-const ImGuiWindowFlags overlayFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
- ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoSavedSettings|
- ImGuiWindowFlags_NoDocking|ImGuiWindowFlags_NoNav;
-ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(8,7));
-ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,7.0f);
-if(ImGui::Begin("##ViewportTransformTools",nullptr,overlayFlags)){
- if(TransformIconButton("MoveIcon",1,tool==1))tool=1;
- ImGui::SameLine(0,4);
- if(TransformIconButton("RotateIcon",2,tool==2))tool=2;
- ImGui::SameLine(0,4);
- if(TransformIconButton("ScaleIcon",3,tool==3))tool=3;
-}
-transformToolbarBounds={(float)ImGui::GetWindowPos().x,(float)ImGui::GetWindowPos().y,
- (float)ImGui::GetWindowSize().x,(float)ImGui::GetWindowSize().y};
-ImGui::End();
-ImGui::PopStyleVar(2);
 const ImGuiWindowFlags toolbarFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
  ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoDocking;
 ImGui::SetNextWindowPos(viewport->Pos,ImGuiCond_Always);
 ImGui::SetNextWindowSize(ImVec2(viewport->Size.x,42.0f),ImGuiCond_Always);
+ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(9,3));
 if(ImGui::Begin("##CoreModelTopToolbar",nullptr,toolbarFlags)){
+ ImGui::AlignTextToFramePadding();
  ImGui::TextUnformatted("CoreModel");
- ImGui::SameLine();ImGui::SeparatorText("Panels");
- ImGui::SameLine();
+ ImGui::SameLine(0,18);
+ ImGui::TextDisabled("Transform");
+ ImGui::SameLine(0,8);
+ if(TransformIconButton("TopMove",1,tool==1))tool=1;
+ ImGui::SameLine(0,4);
+ if(TransformIconButton("TopRotate",2,tool==2))tool=2;
+ ImGui::SameLine(0,4);
+ if(TransformIconButton("TopScale",3,tool==3))tool=3;
+ ImGui::SameLine(0,18);
+ ImGui::TextDisabled("Panels");
+ ImGui::SameLine(0,8);
  if(ImGui::Button(showProperties?"Hide Properties":"Properties"))showProperties=!showProperties;
  ImGui::SameLine();
  if(ImGui::Button(showAI?"Hide CoreModel AI":"CoreModel AI"))showAI=!showAI;
@@ -336,7 +324,8 @@ if(ImGui::Begin("##CoreModelTopToolbar",nullptr,toolbarFlags)){
  if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
  if(connectFeedback>0){ImGui::SameLine();ImGui::TextUnformatted("Copied");}
 }
-ImGui::End();
+ImGui::End()
+ImGui::PopStyleVar();;
 
 
 if(ImGui::Begin("Modeling Tools")){
