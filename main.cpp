@@ -302,7 +302,7 @@ ImGui::End();
 ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId);
 ImVec2 toolPos=central?central->Pos:dockPos;
 ImVec2 toolSize=central?central->Size:dockSize;
-const float barWidth=139.0f;
+const float barWidth=139.0f; // Three transform gizmo modes
 ImGui::SetNextWindowPos(ImVec2(toolPos.x+ImMax(4.0f,(toolSize.x-barWidth)*.5f),toolPos.y+9.0f),ImGuiCond_Always);
 ImGui::SetNextWindowSize(ImVec2(barWidth,48),ImGuiCond_Always);
 const ImGuiWindowFlags overlayFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
@@ -346,11 +346,6 @@ if(ImGui::Begin("Modeling Tools")){
   if(i)ImGui::SameLine();
   if(ImGui::RadioButton(names[i],mode==i)){mode=i;sub=-1;face=-1;}
  }
- ImGui::Separator();
- ImGui::TextUnformatted("Transform");
- if(ImGui::RadioButton("Move",tool==1))tool=1;
- ImGui::SameLine();if(ImGui::RadioButton("Rotate",tool==2))tool=2;
- ImGui::SameLine();if(ImGui::RadioButton("Scale",tool==3))tool=3;
  ImGui::Separator();
  if(ImGui::Button("Extrude Face",ImVec2(-1,0)))extrude();
  if(ImGui::Button("Inset Face",ImVec2(-1,0)))inset();
