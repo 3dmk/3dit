@@ -1,30 +1,24 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-title CoreModel Launcher
-set "EXE=%~dp0build\Release\CoreModel.exe"
+title CoreModel Update and Launch
 set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
-if not exist "%EXE%" (
-  echo CoreModel executable not found:
-  echo "%EXE%"
-  echo Running updater to build it...
-  if not exist "%~dp0Update-and-Launch.ps1" goto :failed
-  if not exist "%PS%" goto :failed
-  "%PS%" -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0Update-and-Launch.ps1"
-  if errorlevel 1 goto :failed
-  exit /b 0
+if not exist "%PS%" (
+ echo ERROR: Windows PowerShell was not found.
+ pause
+ exit /b 1
 )
-echo Launching "%EXE%"
-rem Direct execution avoids PowerShell -Command argument binding errors and CMD start ambiguity.
-"%EXE%"
-set "RESULT=%ERRORLEVEL%"
-echo CoreModel process exit code: %RESULT%
-if not "%RESULT%"=="0" goto :failed
+if not exist "%~dp0Update-and-Launch.ps1" (
+ echo ERROR: Update-and-Launch.ps1 was not found.
+ pause
+ exit /b 1
+)
+echo Checking GitHub updates and building CoreModel if needed...
+"%PS%" -NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0Update-and-Launch.ps1"
+if errorlevel 1 (
+ echo.
+ echo Update or build failed. See Update-and-Launch.log.
+ pause
+ exit /b 1
+)
 exit /b 0
-:failed
-echo.
-echo CoreModel failed to start or exited with an error.
-echo To test directly, run this in PowerShell:
-echo ^& "C:\GPT\CoreModel_GitHub\build\Release\CoreModel.exe"
-pause
-exit /b 1
