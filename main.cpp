@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "rlImGui.h"
 #include <vector>
 #include <string>
@@ -234,7 +235,36 @@ if(mode==1&&selected>=0&&selected<(int)objects.size()){
 rlImGuiBegin();
 // Dockable tool windows, with a transparent central node for the raylib scene.
 ImGuiViewport* viewport=ImGui::GetMainViewport();
-ImGui::DockSpaceOverViewport(0,viewport,ImGuiDockNodeFlags_PassthruCentralNode);
+// Reserve the toolbar height before docking, so docked panels align without overlap.
+const ImGuiID dockId=ImGui::GetID("CoreModelDockspace");
+const ImVec2 dockPos(viewport->Pos.x,viewport->Pos.y+44.0f);
+const ImVec2 dockSize(viewport->Size.x,ImMax(1.0f,viewport->Size.y-44.0f));
+ImGui::SetNextWindowPos(dockPos,ImGuiCond_Always);
+ImGui::SetNextWindowSize(dockSize,ImGuiCond_Always);
+const ImGuiWindowFlags hostFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
+ ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoBringToFrontOnFocus|
+ ImGuiWindowFlags_NoNavFocus|ImGuiWindowFlags_NoSavedSettings|
+ ImGuiWindowFlags_NoBackground|ImGuiWindowFlags_NoDocking;
+ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0,0));
+ImGui::Begin("##CoreModelDockHost",nullptr,hostFlags);
+ImGui::PopStyleVar();
+if(ImGui::DockBuilderGetNode(dockId)==nullptr){
+ ImGui::DockBuilderRemoveNode(dockId);
+ ImGui::DockBuilderAddNode(dockId,ImGuiDockNodeFlags_DockSpace|ImGuiDockNodeFlags_PassthruCentralNode);
+ ImGui::DockBuilderSetNodeSize(dockId,dockSize);
+ ImGuiID center=dockId;
+ ImGuiID left=ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.19f,nullptr,&center);
+ ImGuiID right=ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.23f,nullptr,&center);
+ ImGuiID bottomLeft=left;
+ ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
+ ImGui::DockBuilderDockWindow("Modeling Tools",topLeft);
+ ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
+ ImGui::DockBuilderDockWindow("Properties",right);
+ ImGui::DockBuilderDockWindow("CoreModel AI",right);
+ ImGui::DockBuilderFinish(dockId);
+}
+ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
+ImGui::End();
 const ImGuiWindowFlags toolbarFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_NoMove|
  ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoSavedSettings|ImGuiWindowFlags_NoDocking;
 ImGui::SetNextWindowPos(viewport->Pos,ImGuiCond_Always);
@@ -251,8 +281,8 @@ if(ImGui::Begin("##CoreModelTopToolbar",nullptr,toolbarFlags)){
  if(connectFeedback>0){ImGui::SameLine();ImGui::TextUnformatted("Copied");}
 }
 ImGui::End();
-ImGui::SetNextWindowPos(ImVec2(10,45),ImGuiCond_FirstUseEver);
-ImGui::SetNextWindowSize(ImVec2(205,385),ImGuiCond_FirstUseEver);
+
+
 if(ImGui::Begin("Modeling Tools")){
  ImGui::TextUnformatted("Selection mode");
  const char* names[]={"Object","Vertex","Edge","Face"};
@@ -270,8 +300,8 @@ if(ImGui::Begin("Modeling Tools")){
  if(ImGui::Button("Inset Face",ImVec2(-1,0)))inset();
 }
 ImGui::End();
-ImGui::SetNextWindowPos(ImVec2(10,440),ImGuiCond_FirstUseEver);
-ImGui::SetNextWindowSize(ImVec2(205,175),ImGuiCond_FirstUseEver);
+
+
 if(ImGui::Begin("Create Objects")){
  if(ImGui::Button("Box",ImVec2(-1,0))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
  if(ImGui::Button("Sphere",ImVec2(-1,0))){checkpoint();objects.push_back(sphere());selected=(int)objects.size()-1;face=-1;sub=-1;}
@@ -279,8 +309,8 @@ if(ImGui::Begin("Create Objects")){
 }
 ImGui::End();
 if(showProperties){
-ImGui::SetNextWindowPos(ImVec2((float)w-270,55),ImGuiCond_FirstUseEver);
-ImGui::SetNextWindowSize(ImVec2(260,340),ImGuiCond_FirstUseEver);
+
+
 if(ImGui::Begin("Properties")){
  if(selected>=0&&selected<(int)objects.size()){
   auto& o=objects[selected];
@@ -300,8 +330,8 @@ if(ImGui::Begin("Properties")){
 ImGui::End();
 }
 if(showAI){
-ImGui::SetNextWindowPos(ImVec2(10,(float)h-145),ImGuiCond_FirstUseEver);
-ImGui::SetNextWindowSize(ImVec2(300,105),ImGuiCond_FirstUseEver);
+
+
 if(ImGui::Begin("CoreModel AI")){
  if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
  if(connectFeedback>0)ImGui::TextUnformatted("Connection request copied.");
