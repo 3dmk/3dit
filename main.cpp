@@ -249,13 +249,16 @@ if(ImGui::Begin("Modeling Tools")){
  ImGui::SameLine();if(ImGui::RadioButton("Rotate",tool==2))tool=2;
  ImGui::SameLine();if(ImGui::RadioButton("Scale",tool==3))tool=3;
  ImGui::Separator();
- ImGui::TextUnformatted("Create");
+ if(ImGui::Button("Extrude Face",ImVec2(-1,0)))extrude();
+ if(ImGui::Button("Inset Face",ImVec2(-1,0)))inset();
+}
+ImGui::End();
+ImGui::SetNextWindowPos(ImVec2(10,440),ImGuiCond_FirstUseEver);
+ImGui::SetNextWindowSize(ImVec2(205,175),ImGuiCond_FirstUseEver);
+if(ImGui::Begin("Create Objects")){
  if(ImGui::Button("Box",ImVec2(-1,0))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
  if(ImGui::Button("Sphere",ImVec2(-1,0))){checkpoint();objects.push_back(sphere());selected=(int)objects.size()-1;face=-1;sub=-1;}
  if(ImGui::Button("Plane",ImVec2(-1,0))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
- ImGui::Separator();
- if(ImGui::Button("Extrude Face",ImVec2(-1,0)))extrude();
- if(ImGui::Button("Inset Face",ImVec2(-1,0)))inset();
 }
 ImGui::End();
 ImGui::SetNextWindowPos(ImVec2((float)w-270,45),ImGuiCond_FirstUseEver);
