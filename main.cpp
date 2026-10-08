@@ -22,6 +22,93 @@ MeshObject sphere(){MeshObject o;o.name="Sphere";constexpr int N=16,R=10;for(int
 Vector3 world(const MeshObject&o,int i){return Vector3Add(o.vertices[i],o.position);}
 void extrude(){if(selected<0||face<0||mode!=3)return;checkpoint();auto&o=objects[selected];auto old=o.faces[face];if(old.size()<3)return;Vector3 a=o.vertices[old[0]],b=o.vertices[old[1]],c=o.vertices[old[2]];Vector3 n=Vector3Normalize(Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a)));std::vector<int> top;for(int i:old){top.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Add(o.vertices[i],Vector3Scale(n,.5f)));}o.faces[face]=top;for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],top[(i+1)%top.size()],top[i]});}
 void inset(){if(selected<0||face<0||mode!=3)return;checkpoint();auto&o=objects[selected];auto old=o.faces[face];Vector3 c{};for(int i:old)c=Vector3Add(c,o.vertices[i]);c=Vector3Scale(c,1.0f/old.size());std::vector<int> inner;for(int i:old){inner.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Lerp(c,o.vertices[i],.7f));}o.faces[face]=inner;for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],inner[(i+1)%inner.size()],inner[i]});}
+
+bool validComponent(){return selected>=0&&selected<(int)objects.size();}
+void compactVertices(MeshObject& o){
+ std::vector<int> used(o.vertices.size(),0);
+ for(const auto& f:o.faces)for(int v:f)if(v>=0&&v<(int)used.size())used[v]=1;
+ std::vector<int> map(o.vertices.size(),-1);std::vector<Vector3> verts;
+ for(int i=0;i<(int)o.vertices.size();i++)if(used[i]){map[i]=(int)verts.size();verts.push_back(o.vertices[i]);}
+ for(auto& f:o.faces)for(int& v:f)v=map[v];
+ o.vertices.swap(verts);
+}
+void removeSelectedVertex(){
+ if(mode!=1||!validComponent())return;
+ auto& o=objects[selected];if(sub<0||sub>=(int)o.vertices.size())return;
+ checkpoint();int v=sub;
+ o.faces.erase(std::remove_if(o.faces.begin(),o.faces.end(),[&](const std::vector<int>& f){return std::find(f.begin(),f.end(),v)!=f.end();}),o.faces.end());
+ compactVertices(o);sub=-1;face=-1;
+}
+void weldSelectedVertex(){
+ if(mode!=1||!validComponent())return;
+ auto& o=objects[selected];if(sub<0||sub>=(int)o.vertices.size()||o.vertices.size()<2)return;
+ int other=-1;float nearest=1.0e20f;
+ for(int i=0;i<(int)o.vertices.size();i++)if(i!=sub){float d=Vector3Distance(o.vertices[sub],o.vertices[i]);if(d<nearest){nearest=d;other=i;}}
+ if(other<0)return;
+ checkpoint();Vector3 midpoint=Vector3Scale(Vector3Add(o.vertices[sub],o.vertices[other]),.5f);
+ o.vertices[other]=midpoint;
+ for(auto& f:o.faces)for(int& v:f)if(v==sub)v=other;
+ o.faces.erase(std::remove_if(o.faces.begin(),o.faces.end(),[](const std::vector<int>& f){std::set<int> unique(f.begin(),f.end());return unique.size()<3;}),o.faces.end());
+ compactVertices(o);sub=-1;face=-1;
+}
+void breakSelectedVertex(){
+ if(mode!=1||!validComponent())return;auto& o=objects[selected];
+ if(sub<0||sub>=(int)o.vertices.size())return;
+ int uses=0;for(const auto& f:o.faces)if(std::find(f.begin(),f.end(),sub)!=f.end())uses++;
+ if(uses<2)return;
+ checkpoint();bool first=true;
+ for(auto& f:o.faces)for(int& v:f)if(v==sub){if(first)first=false;else{o.vertices.push_back(o.vertices[sub]);v=(int)o.vertices.size()-1;}}
+}
+void splitSelectedEdge(){
+ if(mode!=2||!validComponent())return;auto& o=objects[selected];
+ std::set<std::pair<int,int>> all;
+ for(const auto& f:o.faces)for(size_t j=0;j<f.size();j++){int a=f[j],b=f[(j+1)%f.size()];if(a>b)std::swap(a,b);all.insert({a,b});}
+ if(sub<0||sub>=(int)all.size())return;
+ auto it=all.begin();std::advance(it,sub);int a=it->first,b=it->second;
+ checkpoint();int mid=(int)o.vertices.size();o.vertices.push_back(Vector3Scale(Vector3Add(o.vertices[a],o.vertices[b]),.5f));
+ for(auto& f:o.faces)for(size_t j=0;j<f.size();j++){int x=f[j],y=f[(j+1)%f.size()];if((x==a&&y==b)||(x==b&&y==a)){f.insert(f.begin()+j+1,mid);break;}}
+ sub=-1;face=-1;
+}
+void removeSelectedEdge(){
+ if(mode!=2||!validComponent())return;auto& o=objects[selected];
+ std::set<std::pair<int,int>> all;
+ for(const auto& f:o.faces)for(size_t j=0;j<f.size();j++){int a=f[j],b=f[(j+1)%f.size()];if(a>b)std::swap(a,b);all.insert({a,b});}
+ if(sub<0||sub>=(int)all.size())return;
+ auto it=all.begin();std::advance(it,sub);int a=it->first,b=it->second;
+ std::vector<int> adjacent;
+ for(int i=0;i<(int)o.faces.size();i++){const auto& f=o.faces[i];for(size_t j=0;j<f.size();j++)if((f[j]==a&&f[(j+1)%f.size()]==b)||(f[j]==b&&f[(j+1)%f.size()]==a)){adjacent.push_back(i);break;}}
+ if(adjacent.size()!=2)return;
+ const auto first=o.faces[adjacent[0]],second=o.faces[adjacent[1]];
+ std::vector<int> merged;
+ auto append=[&](const std::vector<int>& f,int start,int end){int j=start;for(int n=0;n<(int)f.size();n++){merged.push_back(f[j]);if(f[j]==end)break;j=(j+1)%(int)f.size();}};
+ auto findIndex=[](const std::vector<int>& f,int v){return (int)(std::find(f.begin(),f.end(),v)-f.begin());};
+ append(first,(findIndex(first,b)+1)%(int)first.size(),b);
+ append(second,(findIndex(second,a)+1)%(int)second.size(),a);
+ std::set<int> unique(merged.begin(),merged.end());if(unique.size()!=merged.size()||merged.size()<3)return;
+ checkpoint();o.faces.erase(o.faces.begin()+adjacent[1]);o.faces[adjacent[0]]=merged;sub=-1;face=-1;
+}
+void flipSelectedFace(){
+ if(mode!=3||!validComponent())return;auto& o=objects[selected];if(face<0||face>=(int)o.faces.size())return;
+ checkpoint();std::reverse(o.faces[face].begin(),o.faces[face].end());
+}
+void detachSelectedFace(){
+ if(mode!=3||!validComponent())return;auto& o=objects[selected];if(face<0||face>=(int)o.faces.size())return;
+ checkpoint();auto& f=o.faces[face];for(int& v:f){o.vertices.push_back(o.vertices[v]);v=(int)o.vertices.size()-1;}
+}
+void removeSelectedFace(){
+ if(mode!=3||!validComponent())return;auto& o=objects[selected];if(face<0||face>=(int)o.faces.size())return;
+ checkpoint();o.faces.erase(o.faces.begin()+face);face=-1;sub=-1;compactVertices(o);
+}
+void outlineSelectedFace(){
+ if(mode!=3||!validComponent())return;auto& o=objects[selected];if(face<0||face>=(int)o.faces.size())return;
+ auto old=o.faces[face];if(old.size()<3)return;Vector3 center{};
+ for(int v:old)center=Vector3Add(center,o.vertices[v]);center=Vector3Scale(center,1.0f/old.size());
+ checkpoint();std::vector<int> outer;
+ for(int v:old){outer.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Add(center,Vector3Scale(Vector3Subtract(o.vertices[v],center),1.2f)));}
+ for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],outer[(i+1)%outer.size()],outer[i]});
+ o.faces[face]=outer;
+}
+
 void pick(Vector2 mouse){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int best=-1,bf=-1;for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!hit.hit)hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(hit.hit&&hit.distance<nearest){nearest=hit.distance;best=oi;bf=fi;}}}}selected=best;face=bf;}
 
 std::vector<std::pair<int,int>> edges(const MeshObject& o){
@@ -420,14 +507,43 @@ ImGui::PopStyleVar();
 
 if(ImGui::Begin("Modeling Tools")){
  ImGui::TextUnformatted("Selection mode");
- const char* names[]={"Object","Vertex","Edge","Face"};
- for(int i=0;i<4;i++){
-  if(i)ImGui::SameLine();
-  if(ImGui::RadioButton(names[i],mode==i)){mode=i;sub=-1;face=-1;}
- }
+ const char* names[]={"Object","Vertex","Edge","Polygon"};
+ for(int i=0;i<4;i++){if(i)ImGui::SameLine();if(ImGui::RadioButton(names[i],mode==i)){mode=i;sub=-1;face=-1;}}
  ImGui::Separator();
- if(ImGui::Button("Extrude Face",ImVec2(-1,0)))extrude();
- if(ImGui::Button("Inset Face",ImVec2(-1,0)))inset();
+ auto operation=[&](const char* label,bool available,void(*fn)()){
+  ImGui::BeginDisabled(!available);
+  if(ImGui::Button(label,ImVec2(-1,0)))fn();
+  ImGui::EndDisabled();
+ };
+ bool vertex=mode==1&&validComponent()&&sub>=0&&sub<(int)objects[selected].vertices.size();
+ bool edge=mode==2&&validComponent()&&sub>=0;
+ bool polygon=mode==3&&validComponent()&&face>=0&&face<(int)objects[selected].faces.size();
+ if(ImGui::CollapsingHeader("Vertex",ImGuiTreeNodeFlags_DefaultOpen)){
+  ImGui::BeginDisabled(!vertex);if(ImGui::Button("Move Vertex (W)",ImVec2(-1,0)))tool=1;ImGui::EndDisabled();
+  operation("Weld Nearest",vertex,weldSelectedVertex);
+  operation("Remove Vertex",vertex,removeSelectedVertex);
+  operation("Break Vertex",vertex,breakSelectedVertex);
+  ImGui::BeginDisabled();ImGui::Button("Target Weld",ImVec2(-1,0));ImGui::Button("Chamfer Vertex",ImVec2(-1,0));ImGui::Button("Extrude Vertex",ImVec2(-1,0));ImGui::Button("Connect Vertices",ImVec2(-1,0));ImGui::EndDisabled();
+ }
+ if(ImGui::CollapsingHeader("Edge",ImGuiTreeNodeFlags_DefaultOpen)){
+  operation("Split Edge",edge,splitSelectedEdge);
+  operation("Remove Edge (merge faces)",edge,removeSelectedEdge);
+  ImGui::BeginDisabled();ImGui::Button("Connect Edges",ImVec2(-1,0));ImGui::Button("Chamfer Edge",ImVec2(-1,0));ImGui::Button("Bridge Edges",ImVec2(-1,0));ImGui::Button("Extrude Edge",ImVec2(-1,0));ImGui::Button("Turn Edge",ImVec2(-1,0));ImGui::EndDisabled();
+ }
+ if(ImGui::CollapsingHeader("Border",ImGuiTreeNodeFlags_DefaultOpen)){
+  ImGui::TextDisabled("Open boundary editing");
+  ImGui::BeginDisabled();ImGui::Button("Select Open Edge Loop",ImVec2(-1,0));ImGui::Button("Cap Hole",ImVec2(-1,0));ImGui::Button("Bridge Borders",ImVec2(-1,0));ImGui::Button("Extend Boundary",ImVec2(-1,0));ImGui::EndDisabled();
+ }
+ if(ImGui::CollapsingHeader("Polygon",ImGuiTreeNodeFlags_DefaultOpen)){
+  operation("Extrude Polygon",polygon,extrude);
+  operation("Inset Polygon",polygon,inset);
+  operation("Outline Polygon",polygon,outlineSelectedFace);
+  operation("Flip Polygon",polygon,flipSelectedFace);
+  operation("Detach Polygon",polygon,detachSelectedFace);
+  operation("Remove Polygon",polygon,removeSelectedFace);
+  ImGui::BeginDisabled();ImGui::Button("Bevel Polygon",ImVec2(-1,0));ImGui::Button("Bridge Polygons",ImVec2(-1,0));ImGui::EndDisabled();
+ }
+ ImGui::TextDisabled("Unavailable operations are disabled until implemented.");
 }
 ImGui::End();
 
