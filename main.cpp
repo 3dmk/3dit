@@ -111,6 +111,7 @@ void outlineSelectedFace(){
 }
 
 
+std::vector<std::pair<int,int>> edges(const MeshObject& o);
 std::vector<std::pair<int,int>> boundaryEdges(const MeshObject& o){
  std::map<std::pair<int,int>,int> count;
  for(const auto& f:o.faces)for(size_t i=0;i<f.size();i++){
@@ -190,7 +191,7 @@ void turnSelectedEdge(){
  int c=-1,d=-1;for(int v:f)if(v!=a&&v!=b)c=v;for(int v:g)if(v!=a&&v!=b)d=v;
  if(c<0||d<0||c==d)return;
  // Reject an existing diagonal: a turn must not create a non-manifold duplicate.
- if(std::find(all.begin(),all.end(),std::minmax(c,d))!=all.end())return;
+ if(std::find(all.begin(),all.end(),std::make_pair(std::min(c,d),std::max(c,d)))!=all.end())return;
  // Preserve the original triangle winding along the shared edge.
  bool ab=false;for(int i=0;i<3;i++)if(f[i]==a&&f[(i+1)%3]==b)ab=true;
  checkpoint();
