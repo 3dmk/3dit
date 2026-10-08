@@ -174,6 +174,56 @@ void extrudeSelectedEdge(){
  o.faces.push_back({a,b,d,c});sub=-1;face=-1;
 }
 
+
+void turnSelectedEdge(){
+ if(mode!=2||!validComponent())return;
+ auto& o=objects[selected];auto all=edges(o);
+ if(sub<0||sub>=(int)all.size())return;
+ int a=all[sub].first,b=all[sub].second;
+ std::vector<int> adjacent;
+ for(int i=0;i<(int)o.faces.size();i++){
+  const auto& f=o.faces[i];if(f.size()!=3)continue;
+  if(std::find(f.begin(),f.end(),a)!=f.end()&&std::find(f.begin(),f.end(),b)!=f.end())adjacent.push_back(i);
+ }
+ if(adjacent.size()!=2)return;
+ const auto& f=o.faces[adjacent[0]];const auto& g=o.faces[adjacent[1]];
+ int c=-1,d=-1;for(int v:f)if(v!=a&&v!=b)c=v;for(int v:g)if(v!=a&&v!=b)d=v;
+ if(c<0||d<0||c==d)return;
+ // Reject an existing diagonal: a turn must not create a non-manifold duplicate.
+ if(std::find(all.begin(),all.end(),std::minmax(c,d))!=all.end())return;
+ // Preserve the original triangle winding along the shared edge.
+ bool ab=false;for(int i=0;i<3;i++)if(f[i]==a&&f[(i+1)%3]==b)ab=true;
+ checkpoint();
+ if(ab){o.faces[adjacent[0]]={c,a,d};o.faces[adjacent[1]]={d,b,c};}
+ else{o.faces[adjacent[0]]={c,b,d};o.faces[adjacent[1]]={d,a,c};}
+ sub=-1;face=-1;
+}
+void bevelSelectedPolygon(){
+ if(mode!=3||!validComponent())return;
+ auto& o=objects[selected];if(face<0||face>=(int)o.faces.size())return;
+ auto old=o.faces[face];if(old.size()<3)return;
+ Vector3 center{},normal{};
+ for(int v:old)center=Vector3Add(center,o.vertices[v]);
+ center=Vector3Scale(center,1.0f/old.size());
+ for(size_t i=0;i<old.size();i++){
+  Vector3 a=Vector3Subtract(o.vertices[old[i]],center);
+  Vector3 b=Vector3Subtract(o.vertices[old[(i+1)%old.size()]],center);
+  normal=Vector3Add(normal,Vector3CrossProduct(a,b));
+ }
+ if(Vector3Length(normal)<1e-6f)return;
+ normal=Vector3Normalize(normal);
+ checkpoint();
+ std::vector<int> top;
+ for(int v:old){
+  Vector3 inner=Vector3Lerp(center,o.vertices[v],.8f);
+  top.push_back((int)o.vertices.size());
+  o.vertices.push_back(Vector3Add(inner,Vector3Scale(normal,.2f)));
+ }
+ o.faces[face]=top;
+ for(size_t i=0;i<old.size();i++)
+  o.faces.push_back({old[i],old[(i+1)%old.size()],top[(i+1)%top.size()],top[i]});
+}
+
 void pick(Vector2 mouse){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int best=-1,bf=-1;for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!hit.hit)hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(hit.hit&&hit.distance<nearest){nearest=hit.distance;best=oi;bf=fi;}}}}selected=best;face=bf;}
 
 std::vector<std::pair<int,int>> edges(const MeshObject& o){
@@ -594,9 +644,10 @@ if(ImGui::Begin("Modeling Tools")){
  if(ImGui::CollapsingHeader("Edge",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Split Edge",edge,splitSelectedEdge);
   operation("Remove Edge (merge faces)",edge,removeSelectedEdge);
+  operation("Turn Edge (triangles)",edge,turnSelectedEdge);
   int boundaryA=0,boundaryB=0;bool boundary=edge&&selectedBoundaryEdge(boundaryA,boundaryB);
   operation("Extrude Boundary Edge (Z+)",boundary,extrudeSelectedEdge);
-  ImGui::BeginDisabled();ImGui::Button("Connect Edges",ImVec2(-1,0));ImGui::Button("Chamfer Edge",ImVec2(-1,0));ImGui::Button("Bridge Edges",ImVec2(-1,0));ImGui::Button("Turn Edge",ImVec2(-1,0));ImGui::EndDisabled();
+  ImGui::BeginDisabled();ImGui::Button("Connect Edges",ImVec2(-1,0));ImGui::Button("Chamfer Edge",ImVec2(-1,0));ImGui::Button("Bridge Edges",ImVec2(-1,0));ImGui::EndDisabled();
  }
  if(ImGui::CollapsingHeader("Border",ImGuiTreeNodeFlags_DefaultOpen)){
   ImGui::TextDisabled("Select a boundary edge in Edge mode");
@@ -608,11 +659,12 @@ if(ImGui::Begin("Modeling Tools")){
  if(ImGui::CollapsingHeader("Polygon",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Extrude Polygon",polygon,extrude);
   operation("Inset Polygon",polygon,inset);
+  operation("Bevel Polygon",polygon,bevelSelectedPolygon);
   operation("Outline Polygon",polygon,outlineSelectedFace);
   operation("Flip Polygon",polygon,flipSelectedFace);
   operation("Detach Polygon",polygon,detachSelectedFace);
   operation("Remove Polygon",polygon,removeSelectedFace);
-  ImGui::BeginDisabled();ImGui::Button("Bevel Polygon",ImVec2(-1,0));ImGui::Button("Bridge Polygons",ImVec2(-1,0));ImGui::EndDisabled();
+  ImGui::BeginDisabled();ImGui::Button("Bridge Polygons",ImVec2(-1,0));ImGui::EndDisabled();
  }
  ImGui::TextDisabled("Unavailable operations are disabled until implemented.");
 }
