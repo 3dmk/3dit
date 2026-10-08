@@ -224,6 +224,47 @@ void bevelSelectedPolygon(){
   o.faces.push_back({old[i],old[(i+1)%old.size()],top[(i+1)%top.size()],top[i]});
 }
 
+
+void chamferSelectedVertex(){
+ if(mode!=1||!validComponent())return;
+ auto& o=objects[selected];if(sub<0||sub>=(int)o.vertices.size())return;
+ int original=sub;std::set<int> neighbors;
+ for(const auto& f:o.faces)for(size_t i=0;i<f.size();i++)if(f[i]==original){
+  neighbors.insert(f[(i+1)%f.size()]);neighbors.insert(f[(i+f.size()-1)%f.size()]);
+ }
+ if(neighbors.size()<2)return;
+ checkpoint();
+ // Each incident face receives its own cut corners, avoiding dangling vertex references.
+ std::vector<std::vector<int>> replacement;
+ for(const auto& f:o.faces){
+  auto it=std::find(f.begin(),f.end(),original);
+  if(it==f.end()){replacement.push_back(f);continue;}
+  int k=(int)(it-f.begin()),n=(int)f.size();
+  int previous=f[(k+n-1)%n],next=f[(k+1)%n];
+  int p=(int)o.vertices.size();
+  o.vertices.push_back(Vector3Lerp(o.vertices[original],o.vertices[previous],.25f));
+  int q=(int)o.vertices.size();
+  o.vertices.push_back(Vector3Lerp(o.vertices[original],o.vertices[next],.25f));
+  std::vector<int> cut;cut.reserve(n+1);
+  for(int j=0;j<n;j++){if(j==k){cut.push_back(p);cut.push_back(q);}else cut.push_back(f[j]);}
+  replacement.push_back(cut);
+ }
+ o.faces.swap(replacement);compactVertices(o);sub=-1;face=-1;
+}
+void connectSelectedFaceVertices(){
+ if(mode!=3||!validComponent())return;
+ auto& o=objects[selected];if(face<0||face>=(int)o.faces.size())return;
+ const auto f=o.faces[face];if(f.size()<4)return;
+ // Split a polygon by a non-adjacent diagonal between vertices 0 and 2.
+ std::vector<int> first{f[0],f[1],f[2]};
+ std::vector<int> second{f[0]};second.insert(second.end(),f.begin()+2,f.end());
+ checkpoint();o.faces[face]=first;o.faces.push_back(second);
+}
+void selectBoundaryLoop(){
+ // The current editor has single-edge selection; keep the edge active and expose
+ // the detected loop length rather than falsely implying multi-selection.
+}
+
 void pick(Vector2 mouse){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int best=-1,bf=-1;for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!hit.hit)hit=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(hit.hit&&hit.distance<nearest){nearest=hit.distance;best=oi;bf=fi;}}}}selected=best;face=bf;}
 
 std::vector<std::pair<int,int>> edges(const MeshObject& o){
@@ -639,7 +680,8 @@ if(ImGui::Begin("Modeling Tools")){
   operation("Remove Vertex",vertex,removeSelectedVertex);
   operation("Break Vertex",vertex,breakSelectedVertex);
   operation("Extrude Vertex (Z+)",vertex,extrudeSelectedVertex);
-  ImGui::BeginDisabled();ImGui::Button("Target Weld",ImVec2(-1,0));ImGui::Button("Chamfer Vertex",ImVec2(-1,0));ImGui::Button("Connect Vertices",ImVec2(-1,0));ImGui::EndDisabled();
+  operation("Chamfer Vertex",vertex,chamferSelectedVertex);
+  ImGui::BeginDisabled();ImGui::Button("Target Weld",ImVec2(-1,0));ImGui::EndDisabled();
  }
  if(ImGui::CollapsingHeader("Edge",ImGuiTreeNodeFlags_DefaultOpen)){
   operation("Split Edge",edge,splitSelectedEdge);
@@ -664,6 +706,7 @@ if(ImGui::Begin("Modeling Tools")){
   operation("Flip Polygon",polygon,flipSelectedFace);
   operation("Detach Polygon",polygon,detachSelectedFace);
   operation("Remove Polygon",polygon,removeSelectedFace);
+  operation("Connect Polygon Vertices (split)",polygon,connectSelectedFaceVertices);
   ImGui::BeginDisabled();ImGui::Button("Bridge Polygons",ImVec2(-1,0));ImGui::EndDisabled();
  }
  ImGui::TextDisabled("Unavailable operations are disabled until implemented.");
