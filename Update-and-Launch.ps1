@@ -99,12 +99,12 @@ try {
     if (-not (Get-Command $command -ErrorAction SilentlyContinue)) { Fail "$command is not installed or not on PATH" }
   }
   if (-not (Test-Path (Join-Path $root '.git'))) { Fail 'Run this from a cloned Git repository' }
+  '' | Set-Content -Path $log -Encoding utf8
   $dirty = @(git status --porcelain --untracked-files=no)
   if ($LASTEXITCODE -ne 0) { Fail 'Unable to check Git working tree' }
   if ($dirty.Count -gt 0) { Fail 'Tracked local files have changes; commit or stash before updating' }
-  '' | Set-Content -Path $log -Encoding utf8
   New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
-  if (Test-Path $exe) { Copy-Item $exe $backupExe -Force }
+  if ((Test-Path $exe) -and -not (Test-Path $backupExe)) { Copy-Item $exe $backupExe -Force }
 
   Draw-Screen 20 'CHECKING FOR UPDATES' 'Pulling the latest CoreModel source from GitHub...'
   Run-Step 'Git update' 'git.exe' @('pull','--ff-only','origin','main')
@@ -115,6 +115,8 @@ try {
   Draw-Screen 70 'BUILDING COREMODEL' 'Compiling C++ code. This may take a few minutes...'
   Run-Step 'Release build' 'cmake.exe' @('--build', $build, '--config', 'Release', '--parallel', '2')
   if (-not (Test-Path $exe)) { Fail 'Build completed but CoreModel.exe was not found' }
+  # Promote the successfully built executable only after the build passed.
+  Copy-Item $exe $backupExe -Force
 
   Draw-Screen 95 'STARTING EDITOR' 'Launching CoreModel...'
   Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe)
