@@ -43,11 +43,14 @@ try {
   Step 'Building CoreModel Release' 'cmake.exe' @('--build',$build,'--config','Release','--parallel','2')
   if (-not (Test-Path $exe)) { throw "Build finished but executable is missing: $exe" }
   New-Item -ItemType Directory -Force -Path (Split-Path $knownGood) | Out-Null
-  Status 'Build successful; preserving validated executable as KnownGood candidate'
-  Copy-Item -LiteralPath $exe -Destination $knownGood -Force
-  Status 'Launching CoreModel.exe'
-  Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -ErrorAction Stop
-  Status 'Launch request sent successfully.'
+  Status 'Build completed. Starting the executable directly (not Visual Studio).'
+  # Run the executable with PowerShell's call operator, matching the known-working command.
+  # A successful build is a candidate; do not overwrite an existing KnownGood here.
+  Set-Location -LiteralPath (Split-Path -Parent $exe)
+  & $exe
+  $editorExit = $LASTEXITCODE
+  if ($null -ne $editorExit -and $editorExit -ne 0) { throw "CoreModel.exe exited with code $editorExit" }
+  Status 'CoreModel.exe closed normally.'
   exit 0
 } catch {
   $reason = $_.Exception.Message
