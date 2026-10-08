@@ -43,9 +43,24 @@ float segmentDistance(Vector2 p,Vector2 a,Vector2 b){Vector2 d=Vector2Subtract(b
  return Vector2Distance(p,Vector2Add(a,Vector2Scale(d,t)));}
 int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode!=0&&active(objects[selected]).empty()))return -1;Vector3 p=pivot(objects[selected]);
  Vector2 a=GetWorldToScreen(p,camera);int best=-1;float distance=12;
- for(int i=0;i<3;i++){Vector3 d{};(&d.x)[i]=1.35f;
-  Vector2 b=GetWorldToScreen(Vector3Add(p,d),camera);
-  float x=segmentDistance(mouse,a,b);if(x<distance){distance=x;best=i;}}
+ for(int i=0;i<3;i++){
+  if(tool==2){
+   Vector3 u=i==0?Vector3{0,1,0}:Vector3{1,0,0};
+   Vector3 v=i==2?Vector3{0,1,0}:Vector3{0,0,1};
+   float ringDistance=distance;
+   for(int j=0;j<64;j++){
+    float t0=6.2831853f*j/64.0f,t1=6.2831853f*(j+1)/64.0f;
+    Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f));
+    Vector3 q1=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t1)),Vector3Scale(v,sinf(t1))),1.35f));
+    ringDistance=std::min(ringDistance,segmentDistance(mouse,GetWorldToScreen(q0,camera),GetWorldToScreen(q1,camera)));
+   }
+   if(ringDistance<distance){distance=ringDistance;best=i;}
+  }else{
+   Vector3 d{};(&d.x)[i]=1.35f;
+   Vector2 b=GetWorldToScreen(Vector3Add(p,d),camera);
+   float x=segmentDistance(mouse,a,b);if(x<distance){distance=x;best=i;}
+  }
+ }
  return best;
 }
 void pickComponent(Vector2 mouse){
@@ -243,9 +258,36 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 DrawLine3D({0,0,0},{2,0,0},RED);DrawLine3D({0,0,0},{0,2,0},GREEN);
-for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&fi==face&&mode==3)?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&fi==face&&mode==3)?Color{255,92,92,255}:Color{78,82,88,255});}if(oi==selected){Vector3 p=pivot(o);if(mode==0||!active(o).empty()){DrawLine3D(p,Vector3Add(p,{1.6f,0,0}),RED);DrawLine3D(p,Vector3Add(p,{0,1.6f,0}),GREEN);DrawLine3D(p,Vector3Add(p,{0,0,1.6f}),BLUE);
+for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&fi==face&&mode==3)?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&fi==face&&mode==3)?Color{255,92,92,255}:Color{78,82,88,255});}if(oi==selected){Vector3 p=pivot(o);if(mode==0||!active(o).empty()){if(tool==2){
+  // Rotate: three independent axis-aligned circular rings.
+  const Color colors[3]={RED,GREEN,BLUE};
+  for(int axis=0;axis<3;axis++){
+   Vector3 u=axis==0?Vector3{0,1,0}:Vector3{1,0,0};
+   Vector3 v=axis==2?Vector3{0,1,0}:Vector3{0,0,1};
+   for(int j=0;j<64;j++){
+    float t0=6.2831853f*j/64.0f,t1=6.2831853f*(j+1)/64.0f;
+    Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f));
+    Vector3 q1=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t1)),Vector3Scale(v,sinf(t1))),1.35f));
+    DrawLine3D(q0,q1,colors[axis]);
+   }
+  }
+ }else{
+  const Vector3 directions[3]={{1,0,0},{0,1,0},{0,0,1}};
+  const Color colors[3]={RED,GREEN,BLUE};
+  for(int axis=0;axis<3;axis++){
+   Vector3 tip=Vector3Add(p,Vector3Scale(directions[axis],1.6f));
+   DrawLine3D(p,tip,colors[axis]);
+   if(tool==1){
+    // Move: arrowhead, not a scale cube.
+    DrawCylinderEx(Vector3Add(p,Vector3Scale(directions[axis],1.32f)),tip,.115f,0.0f,10,colors[axis]);
+   }else{
+    // Scale: box handle at each axis endpoint.
+    DrawCube(tip,.22f,.22f,.22f,colors[axis]);
+   }
+  }
+ }
  if(mode==2){auto e=edges(o);for(int k=0;k<(int)e.size();k++)DrawLine3D(world(o,e[k].first),world(o,e[k].second),k==sub?Color{255,65,65,255}:Color{120,125,132,255});}
- DrawSphere(Vector3Add(p,{1.35f,0,0}),.09f,RED);DrawSphere(Vector3Add(p,{0,1.35f,0}),.09f,GREEN);DrawSphere(Vector3Add(p,{0,0,1.35f}),.09f,BLUE);} }}
+} }}
 EndMode3D();
 // Screen-space vertex markers: fixed pixel radius regardless of camera zoom.
 // Render in 2D after the 3D scene, clipped to the central viewport.
