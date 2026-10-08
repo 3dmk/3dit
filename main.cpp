@@ -1,5 +1,6 @@
 #include "raylib.h"
 #include "raymath.h"
+#include "rlgl.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "rlImGui.h"
@@ -258,7 +259,13 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 DrawLine3D({0,0,0},{2,0,0},RED);DrawLine3D({0,0,0},{0,2,0},GREEN);
-for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&fi==face&&mode==3)?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&fi==face&&mode==3)?Color{255,92,92,255}:Color{78,82,88,255});}if(oi==selected){Vector3 p=pivot(o);if(mode==0||!active(o).empty()){if(tool==2){
+for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&fi==face&&mode==3)?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&fi==face&&mode==3)?Color{255,92,92,255}:Color{78,82,88,255});}}
+// Draw the selected transform overlay only after all opaque object geometry.
+if(selected>=0&&selected<(int)objects.size()){
+ auto& o=objects[selected];
+ rlDrawRenderBatchActive();
+ rlDisableDepthTest();
+ Vector3 p=pivot(o);if(mode==0||!active(o).empty()){if(tool==2){
   // Rotate: three independent axis-aligned circular rings.
   const Color colors[3]={RED,GREEN,BLUE};
   for(int axis=0;axis<3;axis++){
@@ -287,7 +294,9 @@ for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(in
   }
  }
  if(mode==2){auto e=edges(o);for(int k=0;k<(int)e.size();k++)DrawLine3D(world(o,e[k].first),world(o,e[k].second),k==sub?Color{255,65,65,255}:Color{120,125,132,255});}
-} }}
+} }
+rlDrawRenderBatchActive();
+rlEnableDepthTest();
 EndMode3D();
 // Screen-space vertex markers: fixed pixel radius regardless of camera zoom.
 // Render in 2D after the 3D scene, clipped to the central viewport.
