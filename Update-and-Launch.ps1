@@ -13,13 +13,18 @@ function Status([string]$message) {
 }
 function Step([string]$name,[string]$program,[string[]]$arguments) {
   Status $name
-  & $program @arguments 2>&1 | ForEach-Object {
-    $line = [string]$_
+  # Native programs can write harmless warnings to stderr. Capture output as text,
+  # and decide success from the actual process exit code, not PowerShell error records.
+  $output = & $program @arguments 2>&1
+  $exitCode = $LASTEXITCODE
+  foreach ($entry in $output) {
+    $line = [string]$entry
     Write-Host $line
     Add-Content -LiteralPath $log -Value $line
   }
-  if ($LASTEXITCODE -ne 0) { throw "$name failed with exit code $LASTEXITCODE" }
+  if ($exitCode -ne 0) { throw "$name failed with exit code $exitCode" }
 }
+
 try {
   Status 'Checking project and tools'
   if (-not (Test-Path (Join-Path $root '.git'))) { throw 'Project folder is not a Git clone.' }
@@ -30,14 +35,16 @@ try {
     New-Item -ItemType Directory -Force -Path (Split-Path $knownGood) | Out-Null
     Copy-Item -LiteralPath $exe -Destination $knownGood -Force
   }
+  Step 'Checking GitHub for latest source' 'git.exe' @('fetch','origin','main')
   $dirty = @(& git.exe status --porcelain --untracked-files=no)
   if ($LASTEXITCODE -ne 0) { throw 'Git status failed.' }
   if ($dirty.Count -gt 0) {
-    Status 'Local source edits detected: skipping Git pull to avoid overwriting them.'
-    Status 'Building current local source; GitHub sync can resume after edits are committed or restored.'
-  } else {
-    Step 'Downloading updates from GitHub' 'git.exe' @('pull','--ff-only','origin','main')
+    Status 'Local tracked edits detected; refusing to silently launch an outdated editor.'
+    Status 'Run: git diff -- main.cpp'
+    Status 'If your local edit is already on GitHub, first back up main.cpp, then run: git restore main.cpp'
+    throw 'Update blocked by local edits. Back up or commit your edits, then rerun the launcher.'
   }
+  Step 'Updating source from GitHub' 'git.exe' @('merge','--ff-only','origin/main')
   Status 'Running the build for this launch; unchanged dependencies may be reused'
   if (Test-Path (Join-Path $build 'CMakeCache.txt')) {
     Step 'Configuring CMake (existing build)' 'cmake.exe' @('-S',$root,'-B',$build)
