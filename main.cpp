@@ -71,9 +71,11 @@ void updatePolygonExtrude(){
  const Vector2 delta=Vector2Subtract(GetMousePosition(),state.start);
  // Use the projected face normal for world-space distance. For normals
  // almost parallel to the view direction, use vertical drag as a fallback.
- const float distance=axisSquared>16.0f
-  ?Vector2DotProduct(delta,screenAxis)/axisSquared
-  :-delta.y*0.01f*Vector3Distance(camera.position,centerWorld);
+ // Vertical drag always controls distance; the projected normal only decides
+ // the sign. This avoids zero movement when the user drags perpendicular to
+ // a nearly horizontal projected normal.
+ const float sign=axisSquared>16.0f&&screenAxis.y>0.0f?-1.0f:1.0f;
+ const float distance=-delta.y*sign*0.01f*std::max(1.0f,Vector3Distance(camera.position,centerWorld));
  for(size_t i=0;i<state.cap.size();++i)
   o.vertices[state.cap[i]]=Vector3Add(state.base[i],Vector3Scale(state.normal,distance));
 }
@@ -581,6 +583,9 @@ int connectFeedback=0;
 bool showProperties=true;
 bool crosshairCursorHidden=false;
 bool openVertexContext=false;
+bool polygonExtrudePending=false;
+Vector2 polygonExtrudePress{};
+int polygonExtrudeFace=-1;
 
 while(!WindowShouldClose()){
  if(connectFeedback>0)connectFeedback--;
@@ -620,10 +625,13 @@ while(!WindowShouldClose()){
  if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
   Vector2 m=GetMousePosition();
   const bool shift=IsKeyDown(KEY_LEFT_SHIFT)||IsKeyDown(KEY_RIGHT_SHIFT);
-  // Shift+left-drag extrudes the clicked polygon by the actual drag distance.
-  if(mode==3&&shift&&validComponent()){
+  // Arm extrusion on mouse-down; create geometry only after a real drag.
+  // This also tolerates Shift being pressed just after the mouse button.
+  if(mode==3&&validComponent()&&shift){
    pickComponent(m);
-   beginPolygonExtrude(m);
+   polygonExtrudePending=face>=0;
+   polygonExtrudeFace=face;
+   polygonExtrudePress=m;
   }else{
    int axis=handleHit(m);
    if(axis>=0)startDrag(axis);
@@ -632,6 +640,15 @@ while(!WindowShouldClose()){
    else if(selected>=0){rectanglePending=true;rectangleStart=m;rectangleEnd=m;}
   }
  }
+if(polygonExtrudePending){
+ if(!IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
+  polygonExtrudePending=false;
+ }else if(Vector2Distance(polygonExtrudePress,GetMousePosition())>=3.0f){
+  polygonExtrudePending=false;
+  face=polygonExtrudeFace;
+  beginPolygonExtrude(polygonExtrudePress);
+ }
+}
 if(polygonExtrudeDrag.active){
  if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))updatePolygonExtrude();
  else endPolygonExtrude();
