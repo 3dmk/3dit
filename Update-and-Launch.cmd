@@ -99,9 +99,10 @@ exit /b 1
 :launch
 call :progress 100 Launching CoreModel...
 call :progress
-if defined COREMODEL_SPLASH_PROGRESS (
-  >"%COREMODEL_SPLASH_PROGRESS%" echo %*
-)
+if not defined COREMODEL_SPLASH_PROGRESS exit /b 0
+set "COREMODEL_PROGRESS_VALUE=%~1"
+shift
+>"%COREMODEL_SPLASH_PROGRESS%" echo %COREMODEL_PROGRESS_VALUE%^|%*
 exit /b 0
 
 :close_splash
