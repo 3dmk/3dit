@@ -29,6 +29,12 @@ if exist "build\CMakeCache.txt" (
 if errorlevel 1 goto :failed
 
 echo [4/4] Building CoreModel.exe...
+rem Preserve the last available executable before rebuilding; never overwrite this backup automatically.
+if exist "build\Release\CoreModel.exe" if not exist "KnownGood\CoreModel.exe" (
+  if not exist "KnownGood" mkdir "KnownGood"
+  copy /Y "build\Release\CoreModel.exe" "KnownGood\CoreModel.exe" >nul
+  if errorlevel 1 echo WARNING: Could not save KnownGood backup.
+)
 rem Capture the actual build output so we only retry a known corrupt-library error.
 cmake --build build --config Release --parallel 2 > "CoreModel-build.log" 2>&1
 set "BUILD_RESULT=%ERRORLEVEL%"
@@ -48,6 +54,10 @@ if not exist "build\Release\CoreModel.exe" goto :missing_exe
 echo.
 echo Build successful. Launching CoreModel.exe directly.
 echo This launcher does not open Visual Studio or run a solution file.
+echo Source revision:
+git rev-parse --short HEAD
+for %%F in ("build\Release\CoreModel.exe") do echo Executable: %%~fF  ^(%%~zF bytes^)
+echo Previous executable backup: KnownGood\CoreModel.exe
 start "" /D "%CD%" "%CD%\build\Release\CoreModel.exe"
 if errorlevel 1 goto :failed
 exit /b 0
