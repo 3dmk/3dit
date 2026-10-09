@@ -1075,6 +1075,8 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  if(TransformIconButton("TopRotate",2,tool==2))tool=2;
  ImGui::SameLine(0,4);
  if(TransformIconButton("TopScale",3,tool==3))tool=3;
+ ImGui::SameLine(0,12);
+ ImGui::TextDisabled("Gizmo: %s | X / Y / Z",tool==1?"Move":tool==2?"Rotate":tool==3?"Scale":"None");
  ImGui::SameLine(0,18);
  ImGui::TextDisabled("Panels");
  ImGui::SameLine(0,8);
@@ -1086,6 +1088,24 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
 ImGui::End();
 ImGui::PopStyleVar();
 
+// Non-interactive viewport information in the central docking area.
+if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId)){
+ const ImVec2 origin(central->Pos.x+14.0f,central->Pos.y+14.0f);
+ ImDrawList* overlay=ImGui::GetForegroundDrawList();
+ char info[256];
+ if(selected>=0&&selected<(int)objects.size()){
+  const MeshObject& o=objects[selected];
+  snprintf(info,sizeof(info),"%s  |  Vertices: %d  |  Faces: %d",
+           o.name.c_str(),(int)o.vertices.size(),(int)o.faces.size());
+ }else{
+  snprintf(info,sizeof(info),"No object selected");
+ }
+ const ImVec2 textSize=ImGui::CalcTextSize(info);
+ overlay->AddRectFilled(ImVec2(origin.x-7,origin.y-5),
+                        ImVec2(origin.x+textSize.x+7,origin.y+textSize.y+5),
+                        IM_COL32(28,28,28,205),4.0f);
+ overlay->AddText(origin,IM_COL32(225,225,225,255),info);
+}
 
 if(ImGui::Begin("Editable Polygon")){
  ImGui::TextUnformatted("Selection mode");
@@ -1158,8 +1178,6 @@ if(ImGui::Begin("Properties")){
  if(selected>=0&&selected<(int)objects.size()){
   auto& o=objects[selected];
   ImGui::Text("Object: %s",o.name.c_str());
-  ImGui::Text("Vertices: %d",(int)o.vertices.size());
-  ImGui::Text("Faces: %d",(int)o.faces.size());
   ImGui::Separator();
   float pos[3]={o.position.x,o.position.y,o.position.z};
   if(ImGui::DragFloat3("Position",pos,0.05f)){
