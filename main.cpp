@@ -584,6 +584,7 @@ bool showProperties=true;
 bool crosshairCursorHidden=false;
 bool openVertexContext=false;
 bool polygonExtrudePending=false;
+int previousSubobjectMode=0;
 Vector2 polygonExtrudePress{};
 int polygonExtrudeFace=-1;
 
@@ -627,6 +628,16 @@ while(!WindowShouldClose()){
   if(IsKeyPressed(KEY_E)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=2;
   if(IsKeyPressed(KEY_R)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=3;
  }
+ // Selection indices refer to different component tables in each mode.
+ // Never carry vertex/edge/face selection sets across a mode change.
+ if(mode!=previousSubobjectMode){
+  rectangleSelected.clear();rectangleObject=-1;
+  rectanglePending=false;rectangleDragging=false;
+  polygonExtrudePending=false;
+  sub=-1;face=-1;
+  drag.active=false;
+  previousSubobjectMode=mode;
+ }
  if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
   Vector2 m=GetMousePosition();
   const bool shift=IsKeyDown(KEY_LEFT_SHIFT)||IsKeyDown(KEY_RIGHT_SHIFT);
@@ -637,11 +648,16 @@ while(!WindowShouldClose()){
    polygonExtrudePending=face>=0;
    polygonExtrudeFace=face;
    polygonExtrudePress=m;
-   if(polygonExtrudePending){rectanglePending=false;rectangleDragging=false;}
+   if(polygonExtrudePending){
+    rectanglePending=false;rectangleDragging=false;
+    rectangleSelected.clear();rectangleObject=-1;
+   }
   }else{
    // In subobject mode, a click on geometry selects that component.
    // Only an actual gizmo hit should begin a transform.
-   int axis=handleHit(m);
+   // Component picking has priority over gizmo hit-testing; otherwise
+   // a gizmo overlapping a vertex/edge/face steals the selection click.
+   int axis=(mode==0||!validComponent())?handleHit(m):-1;
    if(axis>=0)startDrag(axis);
    else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
    else if(targetWeldArmed){pickComponent(m);if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}
@@ -678,8 +694,15 @@ if(rectanglePending&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){
    if(ctrl&&rectangleSelected.count(hit))rectangleSelected.erase(hit);
    else rectangleSelected.insert(hit);
   }
+  // Keep the clicked component active even when multi-selecting.
   sub=-1;face=-1;
-  if(rectangleSelected.size()==1){if(mode==3)face=*rectangleSelected.begin();else sub=*rectangleSelected.begin();}
+  if(hit>=0&&rectangleSelected.count(hit)){
+   if(mode==3)face=hit;
+   else sub=hit;
+  }else if(rectangleSelected.size()==1){
+   if(mode==3)face=*rectangleSelected.begin();
+   else sub=*rectangleSelected.begin();
+  }
  }
  rectanglePending=false;rectangleDragging=false;
 }
