@@ -100,6 +100,66 @@ void compactVertices(MeshObject& o){
  for(auto& f:o.faces)for(int& v:f)v=map[v];
  o.vertices.swap(verts);
 }
+// Split polygon topology against a screen-defined plane, preserving shared edge intersections.
+bool cutMeshByScreenLine(MeshObject& o,Vector2 start,Vector2 finish,bool allFaces,int selectedFace){
+ if(Vector2Distance(start,finish)<6.0f)return false;
+ Ray r0=GetScreenToWorldRay(start,camera),r1=GetScreenToWorldRay(finish,camera);
+ Vector3 normal=Vector3CrossProduct(r0.direction,r1.direction);
+ if(Vector3Length(normal)<1e-6f)return false;
+ normal=Vector3Normalize(normal);
+ const Vector3 planePoint=Vector3Subtract(r0.position,o.position);
+ std::vector<std::vector<int>> result;
+ std::map<std::pair<int,int>,int> intersections;
+ bool changed=false;
+ auto edgeIntersection=[&](int a,int b,float da,float db)->int{
+  auto key=std::minmax(a,b);
+  auto it=intersections.find({key.first,key.second});
+  if(it!=intersections.end())return it->second;
+  float t=da/(da-db);
+  Vector3 p=Vector3Add(o.vertices[a],Vector3Scale(Vector3Subtract(o.vertices[b],o.vertices[a]),t));
+  int id=(int)o.vertices.size();o.vertices.push_back(p);
+  intersections[{key.first,key.second}]=id;
+  return id;
+ };
+ const int count=(int)o.faces.size();
+ for(int fi=0;fi<count;fi++){
+  const auto polygon=o.faces[fi];
+  if((!allFaces&&fi!=selectedFace)||polygon.size()<3){result.push_back(polygon);continue;}
+  std::vector<int> positive,negative;
+  bool hasPositive=false,hasNegative=false;
+  for(int id:polygon){
+   float d=Vector3DotProduct(normal,Vector3Subtract(o.vertices[id],planePoint));
+   if(d>1e-5f)hasPositive=true;
+   if(d< -1e-5f)hasNegative=true;
+  }
+  if(!hasPositive||!hasNegative){result.push_back(polygon);continue;}
+  for(size_t j=0;j<polygon.size();j++){
+   int a=polygon[j],b=polygon[(j+1)%polygon.size()];
+   float da=Vector3DotProduct(normal,Vector3Subtract(o.vertices[a],planePoint));
+   float db=Vector3DotProduct(normal,Vector3Subtract(o.vertices[b],planePoint));
+   if(da>=-1e-5f)positive.push_back(a);
+   if(da<=1e-5f)negative.push_back(a);
+   if((da>1e-5f&&db< -1e-5f)||(da< -1e-5f&&db>1e-5f)){
+    int id=edgeIntersection(a,b,da,db);
+    positive.push_back(id);negative.push_back(id);
+   }
+  }
+  auto clean=[](std::vector<int>& p){
+   p.erase(std::unique(p.begin(),p.end()),p.end());
+   if(p.size()>1&&p.front()==p.back())p.pop_back();
+  };
+  clean(positive);clean(negative);
+  if(positive.size()>=3&&negative.size()>=3){
+   result.push_back(positive);result.push_back(negative);changed=true;
+  }else result.push_back(polygon);
+ }
+ if(!changed)return false;
+ checkpoint();
+ o.faces.swap(result);
+ compactVertices(o);
+ face=-1;sub=-1;
+ return true;
+}
 void removeSelectedVertex(){
  if(mode!=1||!validComponent())return;
  auto& o=objects[selected];if(sub<0||sub>=(int)o.vertices.size())return;
@@ -665,6 +725,8 @@ camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;
 int connectFeedback=0;
 bool crosshairCursorHidden=false;
 bool openVertexContext=false;
+bool cutMode=false,sliceMode=false,cutLineStarted=false;
+Vector2 cutLineStart{},cutLineEnd{};
 bool polygonExtrudePending=false;
 int previousSubobjectMode=0;
 // Cached visible UI rectangles from the completed ImGui frame. Raylib
@@ -788,6 +850,16 @@ while(!WindowShouldClose()){
  }
  if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
   Vector2 m=GetMousePosition();
+  if((cutMode||sliceMode)&&mode==3&&selected>=0&&selected<(int)objects.size()){
+   if(!cutLineStarted){cutLineStart=m;cutLineEnd=m;cutLineStarted=true;}
+   else{
+    cutLineEnd=m;
+    if(cutMeshByScreenLine(objects[selected],cutLineStart,cutLineEnd,sliceMode,face)){
+     rectangleSelected.clear();rectangleObject=-1;
+    }
+    cutLineStarted=false;
+   }
+  }else{
   const bool shift=IsKeyDown(KEY_LEFT_SHIFT)||IsKeyDown(KEY_RIGHT_SHIFT);
   // Arm extrusion on mouse-down; create geometry only after a real drag.
   // This also tolerates Shift being pressed just after the mouse button.
@@ -840,6 +912,8 @@ while(!WindowShouldClose()){
    }
   }
  }
+ }
+if((cutMode||sliceMode)&&cutLineStarted)cutLineEnd=GetMousePosition();
 if(polygonExtrudePending){
  if(!IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
   polygonExtrudePending=false;
@@ -975,6 +1049,11 @@ if(selected>=0&&selected<(int)objects.size()){
 rlDrawRenderBatchActive();
 rlEnableDepthTest();
 EndMode3D();
+// Cut/slice guide line in screen coordinates.
+if((cutMode||sliceMode)&&cutLineStarted){
+ DrawLineEx(cutLineStart,cutLineEnd,2.0f,ORANGE);
+ DrawCircleV(cutLineStart,4.0f,ORANGE);
+}
 // Target Weld direction guide: source vertex -> cursor, with destination snap feedback.
 // Draw as a 2D overlay so it stays visible above the shaded mesh.
 if(targetWeldArmed&&mode==1&&selected==targetWeldObject&&
@@ -1209,6 +1288,10 @@ if(ImGui::Begin("Editable Polygon")){
   ImGui::BeginDisabled();ImGui::Button("Select Open Edge Loop",ImVec2(-1,0));ImGui::Button("Bridge Borders",ImVec2(-1,0));ImGui::EndDisabled();
  }
  if(mode==3&&ImGui::CollapsingHeader("Polygon###PolygonToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
+  if(ImGui::Button(cutMode?"Free Cut: ON":"Free Cut",ImVec2(-1,0))){cutMode=!cutMode;sliceMode=false;cutLineStarted=false;}
+  if(ImGui::Button(sliceMode?"Planar Slice: ON":"Planar Slice",ImVec2(-1,0))){sliceMode=!sliceMode;cutMode=false;cutLineStarted=false;}
+  if(cutMode||sliceMode)ImGui::TextWrapped("Click two viewport points to define the cut line. Free Cut splits the selected polygon; Planar Slice splits all intersected polygons. Click button again to exit.");
+
   operation("Extrude Polygon",polygon,extrude);
   operation("Inset Polygon",polygon,inset);
   operation("Bevel Polygon",polygon,bevelSelectedPolygon);
