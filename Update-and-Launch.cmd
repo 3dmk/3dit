@@ -23,8 +23,10 @@ if errorlevel 1 goto :missing_root
 title CoreModel - Update Build Launch
 rem The splash is cosmetic: failures still appear in this console.
 set "COREMODEL_SPLASH_SIGNAL=%TEMP%\CoreModel-Splash-%RANDOM%-%RANDOM%.done"
+set "COREMODEL_SPLASH_PROGRESS=%COREMODEL_SPLASH_SIGNAL%.progress"
+call :progress 5 Checking project tools...
 if exist "CoreModel-Splash.ps1" (
-  start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\CoreModel-Splash.ps1" -SignalFile "%COREMODEL_SPLASH_SIGNAL%"
+  start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\CoreModel-Splash.ps1" -SignalFile "%COREMODEL_SPLASH_SIGNAL%" -ProgressFile "%COREMODEL_SPLASH_PROGRESS%"
 )
 echo.
 echo === CoreModel automatic updater ===
@@ -37,9 +39,11 @@ where cmake.exe >nul 2>&1
 if errorlevel 1 goto :missing_cmake
 
 if not exist ".git" goto :not_git
+call :progress 15 Checking local changes...
 echo [1/4] Checking local source changes...
 for /f "delims=" %%A in ('git status --porcelain --untracked-files=no 2^>nul') do goto :dirty
 
+call :progress 30 Updating from GitHub...
 echo [2/4] Updating from GitHub...
 git pull --ff-only origin main
 if errorlevel 1 goto :failed
@@ -51,6 +55,7 @@ if exist "build\Release\CoreModel.exe" if exist "build\Release\CoreModel-built-r
   call :check_build_revision
   if not errorlevel 1 goto :launch
 )
+call :progress 50 Configuring build...
 echo [3/4] Configuring build...
 if exist "build\CMakeCache.txt" (
   cmake -S . -B build
@@ -59,6 +64,7 @@ if exist "build\CMakeCache.txt" (
 )
 if errorlevel 1 goto :failed
 
+call :progress 65 Building CoreModel...
 echo [4/4] Building CoreModel.exe...
 rem Preserve the last available executable before rebuilding; never overwrite this backup automatically.
 if exist "build\Release\CoreModel.exe" if not exist "KnownGood\CoreModel.exe" (
@@ -71,6 +77,7 @@ cmake --build build --config Release --parallel 2 > "CoreModel-build.log" 2>&1
 set "BUILD_RESULT=%ERRORLEVEL%"
 type "CoreModel-build.log"
 if "%BUILD_RESULT%"=="0" goto :build_ok
+call :progress 95 Finalizing build...
 findstr /C:"LNK1136" "CoreModel-build.log" >nul 2>&1
 if errorlevel 1 goto :failed
 echo.
@@ -90,7 +97,14 @@ if "%COREM_MODEL_BUILT%"=="%COREMODEL_REVISION%" exit /b 0
 exit /b 1
 
 :launch
-call :close_splash
+call :progress 100 Launching CoreModel...
+call :progress
+if defined COREMODEL_SPLASH_PROGRESS (
+  >"%COREMODEL_SPLASH_PROGRESS%" echo %*
+)
+exit /b 0
+
+:close_splash
 echo.
 echo CoreModel is up to date; launching editor.
 
