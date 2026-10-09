@@ -724,7 +724,9 @@ while(!WindowShouldClose()){
    // Only an actual gizmo hit should begin a transform.
    // Component picking has priority over gizmo hit-testing; otherwise
    // a gizmo overlapping a vertex/edge/face steals the selection click.
-   int axis=(mode==0||!validComponent())?handleHit(m):-1;
+   // Gizmo handles are screen-space targets, including portions outside
+   // the actor silhouette. Always test them in every selection mode.
+   int axis=handleHit(m);
    if(axis>=0)startDrag(axis);
    else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
    else if(targetWeldArmed){pickComponent(m);if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}
