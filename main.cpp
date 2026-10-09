@@ -1434,15 +1434,19 @@ if(ImGui::Begin("Smoothing Groups")){
    group=std::clamp(group,0,32);
    if(group!=o.smoothingGroup){checkpoint();o.smoothingGroup=group;}
   }
-  ImGui::TextDisabled("Choose a numbered smoothing group:");
-  for(int g=1;g<=32;g++){
-   ImGui::PushID(g);
-   if((g-1)%8!=0)ImGui::SameLine(0,3);
-   if(g==o.smoothingGroup)ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.34f,0.48f,0.63f,1.0f));
-   char number[8];snprintf(number,sizeof(number),"%d",g);
-   if(ImGui::Button(number,ImVec2(32,27))&&o.smoothingGroup!=g){checkpoint();o.smoothingGroup=g;}
-   if(g==o.smoothingGroup)ImGui::PopStyleColor();
-   ImGui::PopID();
+  // Compact drop-down replaces the 32-button grid.
+  char selectedGroup[40];
+  snprintf(selectedGroup,sizeof(selectedGroup),o.smoothingGroup==0?"0 - Flat":"%d - Smooth",o.smoothingGroup);
+  if(ImGui::BeginCombo("Smoothing Group",selectedGroup)){
+   for(int g=0;g<=32;g++){
+    char label[40];
+    snprintf(label,sizeof(label),g==0?"0 - Flat":"%d - Smooth",g);
+    if(ImGui::Selectable(label,o.smoothingGroup==g)&&o.smoothingGroup!=g){
+     checkpoint();o.smoothingGroup=g;
+    }
+    if(o.smoothingGroup==g)ImGui::SetItemDefaultFocus();
+   }
+   ImGui::EndCombo();
   }
   if(ImGui::Button("Flat Shading",ImVec2(-1,0))&&o.smoothingGroup!=0){checkpoint();o.smoothingGroup=0;}
   if(ImGui::Button("Smooth Shading",ImVec2(-1,0))&&o.smoothingGroup==0){checkpoint();o.smoothingGroup=1;}
