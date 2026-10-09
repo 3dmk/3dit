@@ -33,10 +33,7 @@ if errorlevel 1 goto :missing_cmake
 
 if not exist ".git" goto :not_git
 echo [1/4] Checking local source changes...
-for /f "delims=" %%A in ('git status --porcelain --untracked-files=no 2^>nul') do goto :missing_root
-echo ERROR: Could not find CoreModel project folder.
-goto :failed
-:dirty
+for /f "delims=" %%A in ('git status --porcelain --untracked-files=no 2^>nul') do goto :dirty
 
 echo [2/4] Updating from GitHub...
 git pull --ff-only origin main
@@ -84,6 +81,9 @@ start "" /D "%CD%" "%CD%\build\Release\CoreModel.exe"
 if errorlevel 1 goto :failed
 exit /b 0
 
+:missing_root
+echo ERROR: Could not locate the CoreModel project folder.
+goto :failed
 :dirty
 echo ERROR: Local tracked source changes prevent GitHub update.
 echo No old editor will be launched.
