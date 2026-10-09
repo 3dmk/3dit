@@ -257,7 +257,7 @@ void weldSelectedVertex(){
  if(mode!=1||!validComponent())return;
  auto& o=objects[selected];if(sub<0||sub>=(int)o.vertices.size()||o.vertices.size()<2)return;
  int other=-1;float nearest=1.0e20f;
- for(int i=0;i<(int)o.vertices.size();i++)if(i!=sub&&verticesSharePolygonEdge(o,sub,i)){float d=Vector3Distance(o.vertices[sub],o.vertices[i]);if(d<nearest){nearest=d;other=i;}}
+ for(int i=0;i<(int)o.vertices.size();i++)if(i!=sub){float d=Vector3Distance(o.vertices[sub],o.vertices[i]);if(d<nearest){nearest=d;other=i;}}
  if(other<0)return;
  checkpoint();Vector3 midpoint=Vector3Scale(Vector3Add(o.vertices[sub],o.vertices[other]),.5f);
  o.vertices[other]=midpoint;
@@ -493,7 +493,6 @@ void applyTargetWeld(int destination){
  if(mode!=1||selected!=targetWeldObject||!validComponent())return;
  auto& o=objects[selected];
  if(destination<0||destination>=(int)o.vertices.size()||targetWeldSource<0||targetWeldSource>=(int)o.vertices.size()||destination==targetWeldSource)return;
- if(!verticesSharePolygonEdge(o,targetWeldSource,destination))return;
  checkpoint();const int source=targetWeldSource;
  for(auto& f:o.faces)for(int& v:f)if(v==source)v=destination;
  cleanWeldedFaces(o);
@@ -1377,11 +1376,13 @@ if(ImGui::Begin("Editable Polygon")){
  if(mode==1&&ImGui::CollapsingHeader("Vertex###VertexToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
   ImGui::BeginDisabled(!vertex);if(ImGui::Button("Move Vertex (W)",ImVec2(-1,0)))tool=1;ImGui::EndDisabled();
   operation("Weld Nearest",vertex,weldSelectedVertex);
+  ImGui::TextDisabled("Weld Nearest merges the closest vertex, including across faces.");
   operation("Remove Vertex",vertex,removeSelectedVertex);
   operation("Break Vertex",vertex,breakSelectedVertex);
   operation("Extrude Vertex (Z+)",vertex,extrudeSelectedVertex);
   operation("Chamfer Vertex",vertex,chamferSelectedVertex);
   operation("Target Weld (click destination)",vertex,armTargetWeld);
+  ImGui::TextDisabled("Target Weld: select source, then click any destination vertex.");
   if(targetWeldArmed)ImGui::TextColored(ImVec4(1.0f,.8f,.3f,1.0f),"Target Weld active: click vertices; right-click to exit");
  }
  if(mode==2&&ImGui::CollapsingHeader("Edge###EdgeToolsHeader",ImGuiTreeNodeFlags_DefaultOpen)){
