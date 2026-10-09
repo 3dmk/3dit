@@ -668,6 +668,10 @@ bool crosshairCursorHidden=false;
 bool openVertexContext=false;
 bool polygonExtrudePending=false;
 int previousSubobjectMode=0;
+// Cached visible UI rectangles from the completed ImGui frame. Raylib
+// processes input before the next ImGui frame, so block viewport clicks
+// over real tool windows rather than the pass-through dock host.
+std::vector<Rectangle> uiInputRects;
 Vector2 polygonExtrudePress{};
 int polygonExtrudeFace=-1;
 
@@ -694,8 +698,10 @@ while(!WindowShouldClose()){
  // Use the actual dockspace central viewport, not hard-coded side-panel
  // widths. A resized/docked panel must never limit extrusion to gizmo area.
  bool inView=pointer.x>=0.0f&&pointer.x<(float)w&&
-             pointer.y>=44.0f&&pointer.y<(float)h&&
-             !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
+             pointer.y>=44.0f&&pointer.y<(float)h;
+ for(const Rectangle& rect:uiInputRects){
+  if(CheckCollisionPointRec(pointer,rect)){inView=false;break;}
+ }
  // Do not query ImGui dock nodes here: rlImGuiBegin() has not yet
  // started this frame. Input is validated by raycast for polygon actions.
  // Dockspace geometry belongs to the later UI/render phase.
@@ -1165,6 +1171,17 @@ if(ImGui::Begin("Properties")){
  }else ImGui::TextUnformatted("No object selected.");
 }
 ImGui::End();
+}
+// Record only real UI panels, not the pass-through dockspace. This
+// prevents a click on selection-mode radio buttons from also picking
+// the mesh or starting a transform underneath the panel.
+uiInputRects.clear();
+for(const char* name:{"Editable Polygon","Create Objects","Properties","##N3DLiteTopToolbar","Vertex Context Menu"}){
+ ImGuiWindow* win=ImGui::FindWindowByName(name);
+ if(win&&win->WasActive&&!win->Hidden){
+  const ImRect r=win->Rect();
+  uiInputRects.push_back({r.Min.x,r.Min.y,r.GetWidth(),r.GetHeight()});
+ }
 }
 rlImGuiEnd();
 EndDrawing();
