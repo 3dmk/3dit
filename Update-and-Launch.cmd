@@ -17,10 +17,21 @@ pause
 exit /b 1
 
 :worker
-if not defined COREMODEL_ROOT goto :missing_root
+if not defined COREMODEL_ROOT goto :close_splash
+if defined COREMODEL_SPLASH_SIGNAL (
+  >"%COREMODEL_SPLASH_SIGNAL%" echo done
+)
+exit /b 0
+
+:missing_root
 cd /d "%COREMODEL_ROOT%"
 if errorlevel 1 goto :missing_root
 title CoreModel - Update Build Launch
+rem The splash is cosmetic: failures still appear in this console.
+set "COREMODEL_SPLASH_SIGNAL=%TEMP%\CoreModel-Splash-%RANDOM%-%RANDOM%.done"
+if exist "CoreModel-Splash.ps1" (
+  start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\CoreModel-Splash.ps1" -SignalFile "%COREMODEL_SPLASH_SIGNAL%"
+)
 echo.
 echo === CoreModel automatic updater ===
 echo Project: %CD%
@@ -68,6 +79,7 @@ type "CoreModel-build.log"
 if "%BUILD_RESULT%"=="0" goto :build_ok
 findstr /C:"LNK1136" "CoreModel-build.log" >nul 2>&1
 if errorlevel 1 goto :failed
+call :close_splash
 echo.
 echo [Recovery] LNK1136 detected: rebuilding all generated libraries once...
 cmake --build build --config Release --clean-first --parallel 2 > "CoreModel-build-recovery.log" 2>&1
@@ -85,6 +97,7 @@ if "%COREM_MODEL_BUILT%"=="%COREMODEL_REVISION%" exit /b 0
 exit /b 1
 
 :launch
+call :close_splash
 echo.
 echo CoreModel is up to date; launching editor.
 
