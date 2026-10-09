@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(CoreModelNative LANGUAGES CXX)
+project(N3DLiteNative LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 include(FetchContent)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -17,8 +17,8 @@ add_library(coremodel_imgui STATIC
   ${rlimgui_SOURCE_DIR}/rlImGui.cpp)
 target_include_directories(coremodel_imgui PUBLIC ${imgui_SOURCE_DIR} ${rlimgui_SOURCE_DIR})
 target_link_libraries(coremodel_imgui PUBLIC raylib)
-add_executable(CoreModel main.cpp)
-target_link_libraries(CoreModel PRIVATE raylib coremodel_imgui)
+add_executable(N3DLite main.cpp)
+target_link_libraries(N3DLite PRIVATE raylib coremodel_imgui)
 
 # Download the open-source Roboto font during configuration; fallback to raylib font offline.
 set(ROBOTO_FONT "${CMAKE_CURRENT_BINARY_DIR}/Roboto.ttf")
@@ -34,6 +34,6 @@ if(NOT EXISTS "${ROBOTO_FONT}")
   endif()
 endif()
 if(EXISTS "${ROBOTO_FONT}")
-  add_custom_command(TARGET CoreModel POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ROBOTO_FONT}" "$<TARGET_FILE_DIR:CoreModel>/Roboto.ttf")
+  add_custom_command(TARGET N3DLite POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ROBOTO_FONT}" "$<TARGET_FILE_DIR:N3DLite>/Roboto.ttf")
 endif()
