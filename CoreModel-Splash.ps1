@@ -1,17 +1,17 @@
-# CoreModel updater splash. Runs in a separate STA PowerShell process.
+# N3DLite updater splash. Runs in a separate STA PowerShell process.
 param([Parameter(Mandatory=$true)][string]$SignalFile, [Parameter(Mandatory=$true)][string]$ProgressFile)
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'CoreModel'
+$form.Text = 'N3DLite'
 $form.FormBorderStyle = 'None'
 $form.StartPosition = 'CenterScreen'
 $form.Size = New-Object System.Drawing.Size(480,220)
 $form.BackColor = [System.Drawing.Color]::FromArgb(30,30,30)
 $form.TopMost = $true
 $heading = New-Object System.Windows.Forms.Label
-$heading.Text = 'COREMODEL'
+$heading.Text = 'N3DLITE'
 $heading.Font = New-Object System.Drawing.Font('Segoe UI',26,[System.Drawing.FontStyle]::Bold)
 $heading.ForeColor = [System.Drawing.Color]::White
 $heading.Location = New-Object System.Drawing.Point(32,36)
