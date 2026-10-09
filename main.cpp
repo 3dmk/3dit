@@ -74,8 +74,23 @@ void updatePolygonExtrude(){
  // Vertical drag always controls distance; the projected normal only decides
  // the sign. This avoids zero movement when the user drags perpendicular to
  // a nearly horizontal projected normal.
- const float sign=axisSquared>16.0f&&screenAxis.y>0.0f?-1.0f:1.0f;
- const float distance=-delta.y*sign*0.01f*std::max(1.0f,Vector3Distance(camera.position,centerWorld));
+ // Map drag to the face normal in screen space, regardless of camera
+ // orbit or whether the normal projects horizontally or vertically.
+ // When looking straight down the normal its projection collapses, so
+ // use a stable vertical screen-space fallback instead of losing movement.
+ const float pixelsPerUnit=std::sqrt(axisSquared);
+ float distance=0.0f;
+ if(pixelsPerUnit>8.0f){
+  const Vector2 direction=Vector2Scale(screenAxis,1.0f/pixelsPerUnit);
+  distance=Vector2DotProduct(delta,direction)/pixelsPerUnit;
+ }else{
+  const float cameraDistance=std::max(1.0f,Vector3Distance(camera.position,centerWorld));
+  const float fovRadians=camera.fovy*DEG2RAD;
+  const float worldPerPixel=(camera.projection==CAMERA_PERSPECTIVE)
+   ?(2.0f*cameraDistance*tanf(fovRadians*0.5f)/std::max(1,GetScreenHeight()))
+   :(camera.fovy/std::max(1,GetScreenHeight()));
+  distance=-delta.y*worldPerPixel;
+ }
  for(size_t i=0;i<state.cap.size();++i)
   o.vertices[state.cap[i]]=Vector3Add(state.base[i],Vector3Scale(state.normal,distance));
 }
