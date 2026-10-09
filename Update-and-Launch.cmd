@@ -29,8 +29,20 @@ if exist "build\CMakeCache.txt" (
 if errorlevel 1 goto :failed
 
 echo [4/4] Building CoreModel.exe...
-cmake --build build --config Release --parallel 2
+rem Capture the actual build output so we only retry a known corrupt-library error.
+cmake --build build --config Release --parallel 2 > "CoreModel-build.log" 2>&1
+set "BUILD_RESULT=%ERRORLEVEL%"
+type "CoreModel-build.log"
+if "%BUILD_RESULT%"=="0" goto :build_ok
+findstr /C:"LNK1136" "CoreModel-build.log" >nul 2>&1
 if errorlevel 1 goto :failed
+echo.
+echo [Recovery] LNK1136 detected: rebuilding all generated libraries once...
+cmake --build build --config Release --clean-first --parallel 2 > "CoreModel-build-recovery.log" 2>&1
+set "RECOVERY_RESULT=%ERRORLEVEL%"
+type "CoreModel-build-recovery.log"
+if not "%RECOVERY_RESULT%"=="0" goto :failed
+:build_ok
 if not exist "build\Release\CoreModel.exe" goto :missing_exe
 
 echo.
