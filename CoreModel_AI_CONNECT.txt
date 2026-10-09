@@ -1,0 +1,11 @@
+COREMODEL_AI_REQUEST
+protocol=1
+action=connect
+source=CoreModel
+repository=https://github.com/3dmk/3dit
+branch=main
+workflow=GitHub
+local_path=C:\GPT\CoreModel_GitHub
+authority=candidate-only
+
+Connect to the CoreModel C++23/raylib editor project using its GitHub repository. Read the current repository source before making changes. Treat all AI edits as candidate changes until built and validated on the user's PC. Preserve the previous known-good build. Implement requested changes in the GitHub source, then tell me to double-click Update-and-Launch.cmd to pull, build, and launch. Do not claim direct live access to my local editor or files.
