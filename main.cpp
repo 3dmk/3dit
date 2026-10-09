@@ -663,7 +663,6 @@ ImGui::StyleColorsDark();
 if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFontLoaded=uiFont.texture.id!=0;}
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
 int connectFeedback=0;
-bool showProperties=true;
 bool crosshairCursorHidden=false;
 bool openVertexContext=false;
 bool polygonExtrudePending=false;
@@ -1049,12 +1048,10 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGui::DockBuilderSetNodeSize(dockId,dockSize);
  ImGuiID center=dockId;
  ImGuiID left=ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.19f,nullptr,&center);
- ImGuiID right=ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.23f,nullptr,&center);
  ImGuiID bottomLeft=left;
  ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
  ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
- ImGui::DockBuilderDockWindow("Properties",right);
  ImGui::DockBuilderFinish(dockId);
 }
 ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
@@ -1085,10 +1082,6 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
   ImGui::TextDisabled("X: --  Y: --  Z: --");
  }
  ImGui::SameLine(0,18);
- ImGui::TextDisabled("Panels");
- ImGui::SameLine(0,8);
- if(ImGui::Button(showProperties?"Hide Properties":"Properties"))showProperties=!showProperties;
- ImGui::SameLine();
  if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
  if(connectFeedback>0){ImGui::SameLine();ImGui::TextUnformatted("Copied");}
 }
@@ -1178,30 +1171,11 @@ if(ImGui::Begin("Create Objects")){
  if(ImGui::Button("Plane",ImVec2(-1,0))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
 }
 ImGui::End();
-if(showProperties){
-
-
-if(ImGui::Begin("Properties")){
- if(selected>=0&&selected<(int)objects.size()){
-  auto& o=objects[selected];
-  ImGui::Text("Object: %s",o.name.c_str());
-  ImGui::Separator();
-  float pos[3]={o.position.x,o.position.y,o.position.z};
-  if(ImGui::DragFloat3("Position",pos,0.05f)){
-   checkpoint();
-   o.position={pos[0],pos[1],pos[2]};
-  }
-  ImGui::Text("Selected vertex/edge: %d",sub);
-  ImGui::Text("Selected face: %d",face);
- }else ImGui::TextUnformatted("No object selected.");
-}
-ImGui::End();
-}
 // Record only real UI panels, not the pass-through dockspace. This
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Editable Polygon","Create Objects","Properties","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Editable Polygon","Create Objects","##N3DLiteTopToolbar","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
