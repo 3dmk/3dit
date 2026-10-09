@@ -11,6 +11,7 @@
 #include <set>
 #include <map>
 #include <utility>
+#include <fstream>
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};};
 struct Snapshot {std::vector<MeshObject> objects;int selected,face,sub;};
 std::vector<MeshObject> objects;std::vector<Snapshot> undoStack,redoStack;int selected=-1,face=-1,mode=0,tool=1,sub=-1;Camera3D camera{};
@@ -577,9 +578,35 @@ bool TransformIconButton(const char* id,int kind,bool active){
  ImGui::PopID();
  return clicked;
 }
-int main(){SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);InitWindow(1280,760,"N3DLite Native v0.8 - C++23");SetTargetFPS(60);
-rlImGuiSetup(true);
-ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+int main(){
+ // Persist the native editor window rectangle separately from ImGui docking.
+ int savedX=0,savedY=0,savedW=1280,savedH=760;
+ bool hasSavedWindow=false;
+ {
+  std::ifstream file("N3DLite-window.cfg");
+  if(file>>savedX>>savedY>>savedW>>savedH){
+   hasSavedWindow=savedW>=640&&savedH>=400&&savedW<=16384&&savedH<=16384;
+  }
+ }
+ SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);
+ InitWindow(hasSavedWindow?savedW:1280,hasSavedWindow?savedH:760,"N3DLite Native v0.8 - C++23");
+ if(hasSavedWindow)SetWindowPosition(savedX,savedY);
+ SetTargetFPS(60);
+ rlImGuiSetup(true);
+ ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+ ImGui::GetIO().IniFilename="N3DLite-layout.ini";
+ ImGui::LoadIniSettingsFromDisk("N3DLite-layout.ini");
+ auto saveWindowLayout=[](){
+  if(IsWindowMinimized()||IsWindowFullscreen())return;
+  const Vector2 pos=GetWindowPosition();
+  const int width=GetScreenWidth(),height=GetScreenHeight();
+  if(width<640||height<400)return;
+  std::ofstream file("N3DLite-window.cfg",std::ios::trunc);
+  if(file)file<<(int)pos.x<<" "<<(int)pos.y<<" "<<width<<" "<<height<<"\\n";
+ };
+ Vector2 lastWindowPos=GetWindowPosition();
+ int lastWindowW=GetScreenWidth(),lastWindowH=GetScreenHeight();
+ float layoutSaveElapsed=0.0f;
 ImGui::StyleColorsDark();
 {
  // Unified neutral dark-gray N3DLite editor palette.
@@ -645,6 +672,18 @@ Vector2 polygonExtrudePress{};
 int polygonExtrudeFace=-1;
 
 while(!WindowShouldClose()){
+ // Save changes after the window stops moving/resizing; ImGui saves docking
+ // positions independently to N3DLite-layout.ini.
+ if(!IsWindowMinimized()&&!IsWindowFullscreen()){
+  const Vector2 pos=GetWindowPosition();
+  const int cw=GetScreenWidth(),ch=GetScreenHeight();
+  if(pos.x!=lastWindowPos.x||pos.y!=lastWindowPos.y||cw!=lastWindowW||ch!=lastWindowH){
+   lastWindowPos=pos;lastWindowW=cw;lastWindowH=ch;layoutSaveElapsed=0.0f;
+  }else{
+   layoutSaveElapsed+=GetFrameTime();
+   if(layoutSaveElapsed>=1.0f){saveWindowLayout();layoutSaveElapsed=-1000000.0f;}
+  }
+ }
  if(connectFeedback>0)connectFeedback--;
  int w=GetScreenWidth(),h=GetScreenHeight();
  // Panels are Dear ImGui windows; the central 3D viewport stays raylib.
@@ -1130,6 +1169,8 @@ ImGui::End();
 rlImGuiEnd();
 EndDrawing();
 }
+saveWindowLayout();
+ImGui::SaveIniSettingsToDisk("N3DLite-layout.ini");
 if(crosshairCursorHidden)ShowCursor();
 rlImGuiShutdown();
 if(uiFontLoaded)UnloadFont(uiFont);
