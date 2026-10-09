@@ -637,7 +637,10 @@ while(!WindowShouldClose()){
    polygonExtrudePending=face>=0;
    polygonExtrudeFace=face;
    polygonExtrudePress=m;
+   if(polygonExtrudePending){rectanglePending=false;rectangleDragging=false;}
   }else{
+   // In subobject mode, a click on geometry selects that component.
+   // Only an actual gizmo hit should begin a transform.
    int axis=handleHit(m);
    if(axis>=0)startDrag(axis);
    else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
