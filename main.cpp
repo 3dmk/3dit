@@ -69,23 +69,17 @@ void updatePolygonExtrude(){
  const Vector2 screenAxis=Vector2Subtract(p1,p0);
  const float axisSquared=Vector2DotProduct(screenAxis,screenAxis);
  const Vector2 delta=Vector2Subtract(GetMousePosition(),state.start);
- // Use the projected face normal for world-space distance. For normals
- // almost parallel to the view direction, use vertical drag as a fallback.
- // Vertical drag always controls distance; the projected normal only decides
- // the sign. This avoids zero movement when the user drags perpendicular to
- // a nearly horizontal projected normal.
- // Map drag to the face normal in screen space, regardless of camera
- // orbit or whether the normal projects horizontally or vertically.
- // When looking straight down the normal its projection collapses, so
- // use a stable vertical screen-space fallback instead of losing movement.
+ const float axisLength=std::sqrt(Vector2DotProduct(screenAxis,screenAxis));
  const float cameraDistance=std::max(1.0f,Vector3Distance(camera.position,centerWorld));
  const float fovRadians=camera.fovy*DEG2RAD;
  const float worldPerPixel=(camera.projection==CAMERA_PERSPECTIVE)
   ?(2.0f*cameraDistance*tanf(fovRadians*0.5f)/std::max(1,GetScreenHeight()))
   :(camera.fovy/std::max(1,GetScreenHeight()));
- // Vertical mouse drag always changes extrusion height, even if the
- // projected face normal is horizontal or points toward the camera.
- const float distance=-delta.y*worldPerPixel;
+ // Dragging along the projected OUTWARD face normal gives positive extrusion.
+ // Use vertical motion only when the normal projects almost to a point.
+ const float distance=(axisLength>5.0f)
+  ?Vector2DotProduct(delta,screenAxis)/(axisLength*axisLength)
+  :-delta.y*worldPerPixel;
  for(size_t i=0;i<state.cap.size();++i)
   o.vertices[state.cap[i]]=Vector3Add(state.base[i],Vector3Scale(state.normal,distance));
 }
@@ -706,8 +700,14 @@ while(!WindowShouldClose()){
   // Arm extrusion on mouse-down; create geometry only after a real drag.
   // This also tolerates Shift being pressed just after the mouse button.
   if(mode==3&&validComponent()&&shift){
-   // Only the polygon under the pointer can start a new extrusion.
+   // A Shift-drag can begin on a polygon OR on a gizmo handle
+   // outside the actor silhouette, using the currently selected face.
+   const int selectedFaceBeforeClick=face;
+   const int gizmoAxis=handleHit(m);
    pickComponent(m);
+   if(face<0&&gizmoAxis>=0&&selectedFaceBeforeClick>=0&&
+      selectedFaceBeforeClick<(int)objects[selected].faces.size())
+    face=selectedFaceBeforeClick;
    polygonExtrudePending=face>=0;
    polygonExtrudeFace=face;
    polygonExtrudePress=m;
