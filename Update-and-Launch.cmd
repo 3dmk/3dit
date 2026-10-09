@@ -25,6 +25,9 @@ set "N3D_PROGRESS=%N3D_SIGNAL%.progress"
 call :progress 5 "Checking project tools..."
 if exist "N3DLite-Splash.ps1" (
  start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\N3DLite-Splash.ps1" -SignalFile "%N3D_SIGNAL%" -ProgressFile "%N3D_PROGRESS%"
+ rem Minimize the updater console after the splash process is started.
+ rem The console is restored automatically if an update/build fails.
+ call :minimize_console
 )
 echo === N3DLite Update and Launch ===
 echo Project: %CD%
@@ -102,6 +105,14 @@ exit /b 0
 if defined N3D_SIGNAL >"%N3D_SIGNAL%" echo done
 exit /b 0
 
+:minimize_console
+powershell.exe -NoProfile -NonInteractive -Command "Add-Type -Namespace N3D -Name Win32 -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern System.IntPtr GetConsoleWindow(); [DllImport(\"user32.dll\")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);' -ErrorAction SilentlyContinue; $h=[N3D.Win32]::GetConsoleWindow(); if($h -ne [IntPtr]::Zero){[N3D.Win32]::ShowWindow($h,6) | Out-Null}" >nul 2>&1
+exit /b 0
+
+:restore_console
+powershell.exe -NoProfile -NonInteractive -Command "Add-Type -Namespace N3D -Name Win32 -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern System.IntPtr GetConsoleWindow(); [DllImport(\"user32.dll\")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);' -ErrorAction SilentlyContinue; $h=[N3D.Win32]::GetConsoleWindow(); if($h -ne [IntPtr]::Zero){[N3D.Win32]::ShowWindow($h,9) | Out-Null}" >nul 2>&1
+exit /b 0
+
 :dirty
 echo ERROR: Local tracked changes prevent automatic update.
 echo Run: git status --short
@@ -110,6 +121,7 @@ goto :failed
 
 :failed
 call :close_splash
+call :restore_console
 echo.
 echo ERROR: N3DLite update or launch failed.
 echo Check the output above. This window will stay open.
