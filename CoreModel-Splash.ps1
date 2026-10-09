@@ -8,7 +8,7 @@ $form.Text = 'CoreModel'
 $form.FormBorderStyle = 'None'
 $form.StartPosition = 'CenterScreen'
 $form.Size = New-Object System.Drawing.Size(480,220)
-$form.BackColor = [System.Drawing.Color]::FromArgb(23,27,36)
+$form.BackColor = [System.Drawing.Color]::FromArgb(30,30,30)
 $form.TopMost = $true
 $heading = New-Object System.Windows.Forms.Label
 $heading.Text = 'COREMODEL'
@@ -20,19 +20,31 @@ $form.Controls.Add($heading)
 $status = New-Object System.Windows.Forms.Label
 $status.Text = 'Checking for updates and preparing editor...'
 $status.Font = New-Object System.Drawing.Font('Segoe UI',11)
-$status.ForeColor = [System.Drawing.Color]::FromArgb(178,193,216)
+$status.ForeColor = [System.Drawing.Color]::FromArgb(170,170,170)
 $status.Location = New-Object System.Drawing.Point(35,106)
 $status.Size = New-Object System.Drawing.Size(410,30)
 $form.Controls.Add($status)
-$bar = New-Object System.Windows.Forms.ProgressBar
-$bar.Style = 'Marquee'
-$bar.MarqueeAnimationSpeed = 25
-$bar.Location = New-Object System.Drawing.Point(35,154)
-$bar.Size = New-Object System.Drawing.Size(410,8)
-$form.Controls.Add($bar)
+# Custom flat loading line: charcoal track and moving graphite segment.
+# This avoids the bright Windows-themed ProgressBar control.
+$line = New-Object System.Windows.Forms.Panel
+$line.Location = New-Object System.Drawing.Point(35,154)
+$line.Size = New-Object System.Drawing.Size(410,5)
+$line.BackColor = [System.Drawing.Color]::FromArgb(53,53,53)
+$form.Controls.Add($line)
+$segment = New-Object System.Windows.Forms.Panel
+$segment.Location = New-Object System.Drawing.Point(0,0)
+$segment.Size = New-Object System.Drawing.Size(100,5)
+$segment.BackColor = [System.Drawing.Color]::FromArgb(105,105,105)
+$line.Controls.Add($segment)
+$progressX = -100
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 250
-$timer.Add_Tick({ if(Test-Path -LiteralPath $SignalFile){$timer.Stop();$form.Close()} })
+$timer.Interval = 30
+$timer.Add_Tick({
+  if(Test-Path -LiteralPath $SignalFile){$timer.Stop();$form.Close();return}
+  $script:progressX += 4
+  if($script:progressX -gt 410){$script:progressX = -100}
+  $segment.Left = $script:progressX
+})
 $form.Add_Shown({$timer.Start()})
 [System.Windows.Forms.Application]::Run($form)
 $timer.Dispose()
