@@ -600,12 +600,9 @@ while(!WindowShouldClose()){
  bool inView=pointer.x>=0.0f&&pointer.x<(float)w&&
              pointer.y>=44.0f&&pointer.y<(float)h&&
              !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
- if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(ImGui::GetID("CoreModelDockspace"))){
-  inView=inView&&pointer.x>=central->Pos.x&&
-         pointer.x<central->Pos.x+central->Size.x&&
-         pointer.y>=central->Pos.y&&
-         pointer.y<central->Pos.y+central->Size.y;
- }
+ // Do not query ImGui dock nodes here: rlImGuiBegin() has not yet
+ // started this frame. Input is validated by raycast for polygon actions.
+ // Dockspace geometry belongs to the later UI/render phase.
  bool typing=ImGui::GetIO().WantTextInput;
  if(!typing){
   // Delete the selected actor in Object mode. Component deletion remains in Editable Polygon.
