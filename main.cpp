@@ -12,7 +12,7 @@
 #include <map>
 #include <utility>
 #include <fstream>
-struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;int smoothingGroup=0;};
+struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 Color meshMaterialColor(const MeshObject& o){
@@ -1098,14 +1098,18 @@ for(int oi=0;oi<(int)objects.size();oi++){
   for(size_t j=1;j+1<f.size();j++){
    int ids[3]={f[0],f[j],f[j+1]};
    Vector3 a=world(o,ids[0]),b=world(o,ids[1]),c=world(o,ids[2]);
-   if(highlighted||o.smoothingGroup==0){
+   if(highlighted||o.smoothingGroup==0||o.smoothingValues[o.smoothingGroup]<=0.0f){
     Color color=highlighted?Color{215,45,50,255}:shadeMaterialTriangle(o,a,b,c,camera.position);
     DrawTriangle3D(a,b,c,color);
    }else{
     Vector3 p[3]={a,b,c};
     rlBegin(RL_TRIANGLES);
     for(int k=0;k<3;k++){
-     Color color=shadeMaterialTriangle(o,p[k],p[(k+1)%3],p[(k+2)%3],camera.position,smooth[ids[k]]);
+     Vector3 flat=Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
+     if(Vector3Length(flat)>1e-7f)flat=Vector3Normalize(flat);
+     const float weight=std::clamp(o.smoothingValues[o.smoothingGroup]/100.0f,0.0f,1.0f);
+     Vector3 blended=Vector3Add(Vector3Scale(flat,1.0f-weight),Vector3Scale(smooth[ids[k]],weight));
+     Color color=shadeMaterialTriangle(o,p[k],p[(k+1)%3],p[(k+2)%3],camera.position,blended);
      rlColor4ub(color.r,color.g,color.b,color.a);
      rlVertex3f(p[k].x,p[k].y,p[k].z);
     }
@@ -1427,7 +1431,7 @@ if(ImGui::Begin("Smoothing Groups")){
  if(selected>=0&&selected<(int)objects.size()){
   MeshObject& o=objects[selected];
   ImGui::Text("Object: %s",o.name.c_str());
-  ImGui::TextDisabled("0 = Flat; 1-32 = Smooth");
+  ImGui::TextDisabled("Group 0 = Flat; groups 1-32 have independent smoothing values");
   int group=o.smoothingGroup;
   ImGui::SetNextItemWidth(100.0f);
   if(ImGui::InputInt("Group number",&group,1,1)){
@@ -1448,9 +1452,17 @@ if(ImGui::Begin("Smoothing Groups")){
    }
    ImGui::EndCombo();
   }
+  if(o.smoothingGroup>0){
+   float value=o.smoothingValues[o.smoothingGroup];
+   ImGui::SetNextItemWidth(-1);
+   if(ImGui::SliderFloat("Smooth value (0-100)",&value,0.0f,100.0f,"%.0f")){
+    if(value!=o.smoothingValues[o.smoothingGroup]){checkpoint();o.smoothingValues[o.smoothingGroup]=value;}
+   }
+   ImGui::TextDisabled("0 = hard edges; 100 = fully averaged normals");
+  }
   if(ImGui::Button("Flat Shading",ImVec2(-1,0))&&o.smoothingGroup!=0){checkpoint();o.smoothingGroup=0;}
   if(ImGui::Button("Smooth Shading",ImVec2(-1,0))&&o.smoothingGroup==0){checkpoint();o.smoothingGroup=1;}
-  ImGui::TextWrapped("Smooths shared vertex normals within this object. Group IDs are object-wide for now.");
+  ImGui::TextWrapped("Each group has its own 0-100 smoothing strength for this object. Groups are currently object-wide.");
  }else ImGui::TextDisabled("Select an object to edit smoothing");
 }
 ImGui::End();
