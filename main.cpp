@@ -78,19 +78,14 @@ void updatePolygonExtrude(){
  // orbit or whether the normal projects horizontally or vertically.
  // When looking straight down the normal its projection collapses, so
  // use a stable vertical screen-space fallback instead of losing movement.
- const float pixelsPerUnit=std::sqrt(axisSquared);
- float distance=0.0f;
- if(pixelsPerUnit>8.0f){
-  const Vector2 direction=Vector2Scale(screenAxis,1.0f/pixelsPerUnit);
-  distance=Vector2DotProduct(delta,direction)/pixelsPerUnit;
- }else{
-  const float cameraDistance=std::max(1.0f,Vector3Distance(camera.position,centerWorld));
-  const float fovRadians=camera.fovy*DEG2RAD;
-  const float worldPerPixel=(camera.projection==CAMERA_PERSPECTIVE)
-   ?(2.0f*cameraDistance*tanf(fovRadians*0.5f)/std::max(1,GetScreenHeight()))
-   :(camera.fovy/std::max(1,GetScreenHeight()));
-  distance=-delta.y*worldPerPixel;
- }
+ const float cameraDistance=std::max(1.0f,Vector3Distance(camera.position,centerWorld));
+ const float fovRadians=camera.fovy*DEG2RAD;
+ const float worldPerPixel=(camera.projection==CAMERA_PERSPECTIVE)
+  ?(2.0f*cameraDistance*tanf(fovRadians*0.5f)/std::max(1,GetScreenHeight()))
+  :(camera.fovy/std::max(1,GetScreenHeight()));
+ // Vertical mouse drag always changes extrusion height, even if the
+ // projected face normal is horizontal or points toward the camera.
+ const float distance=-delta.y*worldPerPixel;
  for(size_t i=0;i<state.cap.size();++i)
   o.vertices[state.cap[i]]=Vector3Add(state.base[i],Vector3Scale(state.normal,distance));
 }
@@ -711,7 +706,12 @@ while(!WindowShouldClose()){
   // Arm extrusion on mouse-down; create geometry only after a real drag.
   // This also tolerates Shift being pressed just after the mouse button.
   if(mode==3&&validComponent()&&shift){
+   // Prefer the polygon directly under the pointer, but preserve the
+   // current polygon selection when dragging from its transform handle.
+   const int previouslySelectedFace=face;
    pickComponent(m);
+   if(face<0&&previouslySelectedFace>=0&&previouslySelectedFace<(int)objects[selected].faces.size())
+    face=previouslySelectedFace;
    polygonExtrudePending=face>=0;
    polygonExtrudeFace=face;
    polygonExtrudePress=m;
@@ -726,7 +726,15 @@ while(!WindowShouldClose()){
    // a gizmo overlapping a vertex/edge/face steals the selection click.
    // Gizmo handles are screen-space targets, including portions outside
    // the actor silhouette. Always test them in every selection mode.
+   // Geometry selection wins over gizmo picking inside the mesh.
+   // The gizmo remains draggable outside the mesh silhouette.
    int axis=handleHit(m);
+   if(mode==3&&axis>=0){
+    const int oldFace=face;
+    pickComponent(m);
+    if(face>=0)axis=-1;
+    face=oldFace;
+   }
    if(axis>=0)startDrag(axis);
    else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
    else if(targetWeldArmed){pickComponent(m);if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}
