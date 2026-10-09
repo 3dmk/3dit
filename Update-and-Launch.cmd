@@ -1,6 +1,26 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-cd /d "%~dp0"
+rem Run a stable temporary copy: Git pull may replace this tracked batch file while it runs.
+if /I not "%~1"=="--worker" (
+  set "COREMODEL_ROOT=%~dp0"
+  set "COREMODEL_WORKER=%TEMP%\CoreModel-Update-%RANDOM%-%RANDOM%.cmd"
+  copy /Y "%~f0" "%COREMODEL_WORKER%" >nul
+  if errorlevel 1 (
+    echo ERROR: Could not create a temporary launcher copy.
+    pause
+    exit /b 1
+  )
+  call "%COREMODEL_WORKER%" --worker
+  set "COREMODEL_RESULT=%ERRORLEVEL%"
+  del /Q "%COREMODEL_WORKER%" >nul 2>&1
+  exit /b %COREMODEL_RESULT%
+)
+if not defined COREMODEL_ROOT (
+  echo ERROR: Missing project root from launcher.
+  pause
+  exit /b 1
+)
+cd /d "%COREMODEL_ROOT%"
 title CoreModel - Update Build Launch
 echo.
 echo === CoreModel automatic updater ===
