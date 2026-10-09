@@ -706,14 +706,57 @@ while(!WindowShouldClose()){
  // Dockspace geometry belongs to the later UI/render phase.
  bool typing=ImGui::GetIO().WantTextInput;
  if(!typing){
-  // Delete the selected actor in Object mode. Component deletion remains in Editable Polygon.
-  if(mode==0&&selected>=0&&selected<(int)objects.size()&&
-     (IsKeyPressed(KEY_DELETE)||IsKeyPressed(KEY_BACKSPACE))){
-   checkpoint();
-   objects.erase(objects.begin()+selected);
-   selected=-1;face=-1;sub=-1;
+  // Delete acts on the current selection level. Keep every edit undoable.
+  if((IsKeyPressed(KEY_DELETE)||IsKeyPressed(KEY_BACKSPACE))&&
+     selected>=0&&selected<(int)objects.size()){
+   if(mode==0){
+    checkpoint();
+    objects.erase(objects.begin()+selected);
+    selected=-1;
+   }else{
+    MeshObject& o=objects[selected];
+    std::set<int> targets;
+    if(rectangleObject==selected)targets=rectangleSelected;
+    if(targets.empty()){
+     const int index=mode==3?face:sub;
+     if(index>=0)targets.insert(index);
+    }
+    std::set<int> facesToRemove;
+    if(mode==3){
+     for(int i:targets)if(i>=0&&i<(int)o.faces.size())facesToRemove.insert(i);
+    }else if(mode==1){
+     std::set<int> vertices;
+     for(int i:targets)if(i>=0&&i<(int)o.vertices.size())vertices.insert(i);
+     for(int i=0;i<(int)o.faces.size();i++)
+      for(int v:o.faces[i])if(vertices.count(v)){facesToRemove.insert(i);break;}
+    }else if(mode==2||mode==4){
+     const auto all=edges(o);
+     const auto boundary=boundaryEdges(o);
+     std::set<std::pair<int,int>> edgeTargets;
+     for(int i:targets)if(i>=0&&i<(int)all.size()){
+      if(mode==2||std::find(boundary.begin(),boundary.end(),all[i])!=boundary.end())
+       edgeTargets.insert(all[i]);
+     }
+     for(int i=0;i<(int)o.faces.size();i++){
+      const auto& polygon=o.faces[i];
+      for(size_t j=0;j<polygon.size();j++){
+       int a=polygon[j],b=polygon[(j+1)%polygon.size()];
+       if(a>b)std::swap(a,b);
+       if(edgeTargets.count({a,b})){facesToRemove.insert(i);break;}
+      }
+     }
+    }
+    if(!facesToRemove.empty()){
+     checkpoint();
+     for(auto it=facesToRemove.rbegin();it!=facesToRemove.rend();++it)
+      o.faces.erase(o.faces.begin()+*it);
+     compactVertices(o);
+    }
+   }
+   face=-1;sub=-1;
    rectangleSelected.clear();rectangleObject=-1;
    rectanglePending=false;rectangleDragging=false;
+   polygonExtrudePending=false;
    targetWeldArmed=false;targetWeldSource=-1;targetWeldObject=-1;
    drag.active=false;
   }
