@@ -39,6 +39,13 @@ echo [2/4] Updating from GitHub...
 git pull --ff-only origin main
 if errorlevel 1 goto :failed
 
+rem Skip compilation when the previously verified build matches this source revision.
+for /f %%H in ('git rev-parse HEAD 2^>nul') do set "COREMODEL_REVISION=%%H"
+if exist "build\Release\CoreModel.exe" if exist "build\Release\CoreModel-built-revision.txt" (
+  set /p COREM_MODEL_BUILT=<"build\Release\CoreModel-built-revision.txt"
+  call :check_build_revision
+  if not errorlevel 1 goto :launch
+)
 echo [3/4] Configuring build...
 if exist "build\CMakeCache.txt" (
   cmake -S . -B build
@@ -69,6 +76,17 @@ type "CoreModel-build-recovery.log"
 if not "%RECOVERY_RESULT%"=="0" goto :failed
 :build_ok
 if not exist "build\Release\CoreModel.exe" goto :missing_exe
+>"build\Release\CoreModel-built-revision.txt" echo %COREMODEL_REVISION%
+goto :launch
+
+:check_build_revision
+rem The helper runs in a fresh parse context so variables read above are expanded correctly.
+if "%COREM_MODEL_BUILT%"=="%COREMODEL_REVISION%" exit /b 0
+exit /b 1
+
+:launch
+echo.
+echo CoreModel is up to date; launching editor.
 
 echo.
 echo Build successful. Launching CoreModel.exe directly.
