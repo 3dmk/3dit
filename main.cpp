@@ -13,7 +13,7 @@
 #include <utility>
 #include <fstream>
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;};
-struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;};
+struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 Color meshMaterialColor(const MeshObject& o){
  const int id=std::clamp(o.materialId,0,(int)materials.size()-1);
@@ -21,6 +21,36 @@ Color meshMaterialColor(const MeshObject& o){
  return {(unsigned char)(std::clamp(c[0],0.0f,1.0f)*255.0f),
          (unsigned char)(std::clamp(c[1],0.0f,1.0f)*255.0f),
          (unsigned char)(std::clamp(c[2],0.0f,1.0f)*255.0f),255};
+}
+// Lightweight viewport Blinn-Phong approximation: live roughness, metalness and specular.
+// This is not a physically based BRDF; it provides responsive material previews.
+Color shadeMaterialTriangle(const MeshObject& o,Vector3 a,Vector3 b,Vector3 c,Vector3 cameraPosition){
+ const EditorMaterial& m=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
+ Vector3 n=Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
+ if(Vector3Length(n)<1e-7f)return meshMaterialColor(o);
+ n=Vector3Normalize(n);
+ Vector3 center=Vector3Scale(Vector3Add(Vector3Add(a,b),c),1.0f/3.0f);
+ Vector3 view=Vector3Subtract(cameraPosition,center);
+ if(Vector3Length(view)<1e-6f)view={0,0,1};
+ view=Vector3Normalize(view);
+ if(Vector3DotProduct(n,view)<0)n=Vector3Negate(n);
+ const Vector3 light=Vector3Normalize(Vector3{0.35f,-0.55f,0.75f});
+ const float diffuse=std::max(0.0f,Vector3DotProduct(n,light));
+ Vector3 halfVector=Vector3Normalize(Vector3Add(light,view));
+ const float rough=std::clamp(m.roughness,0.02f,1.0f);
+ const float shininess=2.0f+126.0f*powf(1.0f-rough,2.0f);
+ const float highlight=powf(std::max(0.0f,Vector3DotProduct(n,halfVector)),shininess);
+ const float metal=std::clamp(m.metallic,0.0f,1.0f);
+ const float spec=std::clamp(m.specular,0.0f,1.0f);
+ unsigned char channel[3];
+ for(int k=0;k<3;k++){
+  const float base=std::clamp(m.baseColor[k],0.0f,1.0f);
+  const float diffusePart=base*(0.22f+0.78f*diffuse)*(1.0f-0.78f*metal);
+  const float specTint=(1.0f-metal)*1.0f+metal*base;
+  const float specPart=highlight*(0.06f+0.9f*spec)*specTint*(0.35f+0.65f*diffuse);
+  channel[k]=(unsigned char)(255.0f*std::clamp(diffusePart+specPart,0.0f,1.0f));
+ }
+ return {channel[0],channel[1],channel[2],255};
 }
 struct Snapshot {std::vector<MeshObject> objects;int selected,face,sub;};
 std::vector<MeshObject> objects;std::vector<Snapshot> undoStack,redoStack;int selected=-1,face=-1,mode=0,tool=1,sub=-1;Camera3D camera{};float gizmoSize=1.0f;
@@ -1018,7 +1048,11 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 // Ground axes use the neutral grid palette; reserve RGB for transform gizmos.
-for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{215,45,50,255}:meshMaterialColor(o);for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{255,92,92,255}:Color{78,82,88,255});}}
+for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{215,45,50,255}:meshMaterialColor(o);for(size_t j=1;j+1<f.size();j++){
+ Vector3 a=world(o,f[0]),b=world(o,f[j]),c=world(o,f[j+1]);
+ Color shaded=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?color:shadeMaterialTriangle(o,a,b,c,camera.position);
+ DrawTriangle3D(a,b,c,shaded);
+}for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{255,92,92,255}:Color{78,82,88,255});}}
 // Draw the selected transform overlay only after all opaque object geometry.
 if(selected>=0&&selected<(int)objects.size()){
  auto& o=objects[selected];
@@ -1348,7 +1382,8 @@ if(ImGui::Begin("Materials")){
   ImGui::ColorEdit3("Base Color",m.baseColor);
   ImGui::SliderFloat("Roughness",&m.roughness,0.0f,1.0f);
   ImGui::SliderFloat("Metallic",&m.metallic,0.0f,1.0f);
-  ImGui::TextDisabled("Roughness / Metallic: stored for future PBR shading");
+  ImGui::SliderFloat("Specular",&m.specular,0.0f,1.0f);
+  ImGui::TextDisabled("Live viewport approximation (Blinn-Phong), not full PBR");
   if(selected>=0&&selected<(int)objects.size()){
    ImGui::Text("Selected: %s",objects[selected].name.c_str());
    if(ImGui::Button("Assign to Selected",ImVec2(-1,0))){
