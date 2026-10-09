@@ -791,6 +791,10 @@ camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;
 int connectFeedback=0;
 bool crosshairCursorHidden=false;
 bool openVertexContext=false;
+bool openViewportContext=false;
+bool backfaceCulling=false;
+Vector2 rightPressPosition{};
+bool rightPressInView=false;
 bool cutMode=false,sliceMode=false,cutLineStarted=false;
 Vector2 cutLineStart{},cutLineEnd{};
 bool polygonExtrudePending=false;
@@ -1023,6 +1027,10 @@ if(rectanglePending&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){
  rectanglePending=false;rectangleDragging=false;
 }
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
+if(IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
+ rightPressPosition=GetMousePosition();
+ rightPressInView=inView;
+}
 if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
  if(targetWeldArmed){targetWeldArmed=false;targetWeldSource=-1;targetWeldObject=-1;}
  else if(mode==1&&validComponent()){
@@ -1033,6 +1041,11 @@ if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
    openVertexContext=true;
   }
  }
+}
+if(IsMouseButtonReleased(MOUSE_BUTTON_RIGHT)){
+ if(rightPressInView&&!openVertexContext&&Vector2Distance(GetMousePosition(),rightPressPosition)<5.0f)
+  openViewportContext=true;
+ rightPressInView=false;
 }
 if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)&&!openVertexContext){
  Vector2 d=GetMouseDelta();Vector3 offset=Vector3Subtract(camera.position,camera.target);
@@ -1077,6 +1090,10 @@ for(int g=-20;g<=20;g++){
 // Ground axes use the neutral grid palette; reserve RGB for transform gizmos.
 // Smooth groups: 0 = flat, positive group = average normals at shared vertices.
 // This editor currently assigns one group to the entire object.
+// Apply only to mesh faces; overlays and gizmos remain double-sided.
+rlDrawRenderBatchActive();
+if(backfaceCulling)rlEnableBackfaceCulling();
+else rlDisableBackfaceCulling();
 for(int oi=0;oi<(int)objects.size();oi++){
  auto& o=objects[oi];
  std::vector<Vector3> smooth(o.vertices.size(),Vector3{0,0,0});
@@ -1119,6 +1136,8 @@ for(int oi=0;oi<(int)objects.size();oi++){
    DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:Color{78,82,88,255});
  }
 }
+rlDrawRenderBatchActive();
+rlDisableBackfaceCulling();
 // Draw the selected transform overlay only after all opaque object geometry.
 if(selected>=0&&selected<(int)objects.size()){
  auto& o=objects[selected];
@@ -1261,6 +1280,15 @@ if(showCrosshair){
  DrawCircleV(cursor,1.5f,ink);
 }
 rlImGuiBegin();
+if(openViewportContext){
+ ImGui::OpenPopup("Viewport Context Menu");
+ openViewportContext=false;
+}
+if(ImGui::BeginPopup("Viewport Context Menu")){
+ if(ImGui::MenuItem("Backface Culling",nullptr,backfaceCulling))
+  backfaceCulling=!backfaceCulling;
+ ImGui::EndPopup();
+}
 if(openVertexContext){
  ImGui::OpenPopup("Vertex Context Menu");
  openVertexContext=false;
@@ -1270,6 +1298,9 @@ if(ImGui::BeginPopup("Vertex Context Menu")){
  ImGui::BeginDisabled(!canEdit);
  if(ImGui::MenuItem("Target Weld"))armTargetWeld();
  if(ImGui::MenuItem("Chamfer"))chamferSelectedVertex();
+ ImGui::Separator();
+ if(ImGui::MenuItem("Backface Culling",nullptr,backfaceCulling))
+  backfaceCulling=!backfaceCulling;
  ImGui::EndDisabled();
  ImGui::EndPopup();
 }
