@@ -534,17 +534,17 @@ void applyDrag(){if(!drag.active||selected<0)return;auto& o=objects[selected];
 }
 
 const char* connectionPrompt =
-"COREMODEL_AI_REQUEST\n"
+"N3DLITE_AI_REQUEST\n"
 "protocol=1\n"
 "action=connect\n"
-"source=CoreModel\n"
+"source=N3DLite\n"
 "repository=https://github.com/3dmk/3dit\n"
 "branch=main\n"
 "workflow=GitHub\n"
 "local_path=C:\\GPT\\CoreModel_GitHub\n"
 "authority=candidate-only\n"
 "\n"
-"Connect to the CoreModel C++23/raylib editor project using its GitHub repository. "
+"Connect to the N3DLite C++23/raylib editor project using its GitHub repository. "
 "Read the current repository source before making changes. Treat all AI edits as "
 "candidate changes until built and validated on the user's PC. Preserve the "
 "previous known-good build. Implement requested changes in the GitHub source, "
@@ -588,7 +588,7 @@ bool TransformIconButton(const char* id,int kind,bool active){
  ImGui::PopID();
  return clicked;
 }
-int main(){SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);InitWindow(1280,760,"CoreModel Native v0.8 - C++23");SetTargetFPS(60);
+int main(){SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);InitWindow(1280,760,"N3DLite Native v0.8 - C++23");SetTargetFPS(60);
 rlImGuiSetup(true);
 ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 ImGui::StyleColorsDark();
@@ -927,7 +927,7 @@ if(ImGui::BeginPopup("Vertex Context Menu")){
 // Dockable tool windows, with a transparent central node for the raylib scene.
 ImGuiViewport* viewport=ImGui::GetMainViewport();
 // Reserve the toolbar height before docking, so docked panels align without overlap.
-const ImGuiID dockId=ImGui::GetID("CoreModelDockspace");
+const ImGuiID dockId=ImGui::GetID("N3DLiteDockspace");
 const ImVec2 dockPos(viewport->Pos.x,viewport->Pos.y+44.0f);
 const ImVec2 dockSize(viewport->Size.x,ImMax(1.0f,viewport->Size.y-44.0f));
 ImGui::SetNextWindowPos(dockPos,ImGuiCond_Always);
@@ -937,7 +937,7 @@ const ImGuiWindowFlags hostFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFlags_
  ImGuiWindowFlags_NoNavFocus|ImGuiWindowFlags_NoSavedSettings|
  ImGuiWindowFlags_NoBackground|ImGuiWindowFlags_NoDocking;
 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(0,0));
-ImGui::Begin("##CoreModelDockHost",nullptr,hostFlags);
+ImGui::Begin("##N3DLiteDockHost",nullptr,hostFlags);
 ImGui::PopStyleVar();
 if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGui::DockBuilderRemoveNode(dockId);
@@ -960,9 +960,9 @@ const ImGuiWindowFlags toolbarFlags=ImGuiWindowFlags_NoDecoration|ImGuiWindowFla
 ImGui::SetNextWindowPos(viewport->Pos,ImGuiCond_Always);
 ImGui::SetNextWindowSize(ImVec2(viewport->Size.x,42.0f),ImGuiCond_Always);
 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,ImVec2(9,3));
-if(ImGui::Begin("##CoreModelTopToolbar",nullptr,toolbarFlags)){
+if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  ImGui::AlignTextToFramePadding();
- ImGui::TextUnformatted("CoreModel");
+ ImGui::TextUnformatted("N3DLite");
  ImGui::SameLine(0,18);
  ImGui::TextDisabled("Transform");
  ImGui::SameLine(0,8);
