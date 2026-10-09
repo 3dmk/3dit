@@ -808,6 +808,16 @@ while(!WindowShouldClose()){
     rectangleSelected.clear();rectangleObject=-1;
    }
   }else{
+   // Target Weld is a vertex-picking operation, independent of the active
+   // Move/Rotate/Scale tool. Handle it before any gizmo hit testing.
+   if(targetWeldArmed){
+    if(mode==1&&selected==targetWeldObject&&validComponent()){
+     pickComponent(m);
+     if(sub>=0)applyTargetWeld(sub);
+    }else{
+     targetWeldArmed=false;
+    }
+   }else{
    // Visible transform handles must remain pickable over the mesh.
    // Prioritize the arrow/cube endpoint, then allow component picking
    // over the thin axis shaft. Rotation rings are direct gizmo targets.
@@ -826,8 +836,8 @@ while(!WindowShouldClose()){
    }
    if(axis>=0)startDrag(axis);
    else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
-   else if(targetWeldArmed){pickComponent(m);if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}
    else if(selected>=0){rectanglePending=true;rectangleStart=m;rectangleEnd=m;}
+   }
   }
  }
 if(polygonExtrudePending){
