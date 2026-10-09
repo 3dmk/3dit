@@ -12,7 +12,16 @@
 #include <map>
 #include <utility>
 #include <fstream>
-struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};};
+struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;};
+struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;};
+std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
+Color meshMaterialColor(const MeshObject& o){
+ const int id=std::clamp(o.materialId,0,(int)materials.size()-1);
+ const auto& c=materials[id].baseColor;
+ return {(unsigned char)(std::clamp(c[0],0.0f,1.0f)*255.0f),
+         (unsigned char)(std::clamp(c[1],0.0f,1.0f)*255.0f),
+         (unsigned char)(std::clamp(c[2],0.0f,1.0f)*255.0f),255};
+}
 struct Snapshot {std::vector<MeshObject> objects;int selected,face,sub;};
 std::vector<MeshObject> objects;std::vector<Snapshot> undoStack,redoStack;int selected=-1,face=-1,mode=0,tool=1,sub=-1;Camera3D camera{};float gizmoSize=1.0f;
 void checkpoint(){undoStack.push_back({objects,selected,face,sub});if(undoStack.size()>80)undoStack.erase(undoStack.begin());redoStack.clear();}
@@ -1009,7 +1018,7 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 // Ground axes use the neutral grid palette; reserve RGB for transform gizmos.
-for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{255,92,92,255}:Color{78,82,88,255});}}
+for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{215,45,50,255}:meshMaterialColor(o);for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{255,92,92,255}:Color{78,82,88,255});}}
 // Draw the selected transform overlay only after all opaque object geometry.
 if(selected>=0&&selected<(int)objects.size()){
  auto& o=objects[selected];
@@ -1189,6 +1198,7 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
  ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
+ ImGui::DockBuilderDockWindow("Materials",bottomLeft);
  ImGui::DockBuilderFinish(dockId);
 }
 ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
@@ -1314,11 +1324,46 @@ if(ImGui::Begin("Create Objects")){
  if(ImGui::Button("Plane",ImVec2(-1,0))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
 }
 ImGui::End();
+// Material library and object assignment; viewport base color is live.
+if(ImGui::Begin("Materials")){
+ if(ImGui::Button("New Material")){
+  EditorMaterial m; m.name="Material "+std::to_string(materials.size());
+  materials.push_back(m);activeMaterial=(int)materials.size()-1;
+ }
+ ImGui::SameLine();
+ if(ImGui::Button("Duplicate")&&activeMaterial>=0&&activeMaterial<(int)materials.size()){
+  EditorMaterial m=materials[activeMaterial];m.name+=" Copy";
+  materials.push_back(m);activeMaterial=(int)materials.size()-1;
+ }
+ ImGui::Separator();
+ if(ImGui::BeginListBox("##MaterialList",ImVec2(-1,110))){
+  for(int i=0;i<(int)materials.size();i++)
+   if(ImGui::Selectable(materials[i].name.c_str(),activeMaterial==i))activeMaterial=i;
+  ImGui::EndListBox();
+ }
+ if(activeMaterial>=0&&activeMaterial<(int)materials.size()){
+  EditorMaterial& m=materials[activeMaterial];
+  char name[128];snprintf(name,sizeof(name),"%s",m.name.c_str());
+  if(ImGui::InputText("Name",name,sizeof(name)))m.name=name;
+  ImGui::ColorEdit3("Base Color",m.baseColor);
+  ImGui::SliderFloat("Roughness",&m.roughness,0.0f,1.0f);
+  ImGui::SliderFloat("Metallic",&m.metallic,0.0f,1.0f);
+  ImGui::TextDisabled("Roughness / Metallic: stored for future PBR shading");
+  if(selected>=0&&selected<(int)objects.size()){
+   ImGui::Text("Selected: %s",objects[selected].name.c_str());
+   if(ImGui::Button("Assign to Selected",ImVec2(-1,0))){
+    checkpoint();objects[selected].materialId=activeMaterial;
+   }
+   ImGui::Text("Assigned: %s",materials[std::clamp(objects[selected].materialId,0,(int)materials.size()-1)].name.c_str());
+  }else ImGui::TextDisabled("Select an object to assign material");
+ }
+}
+ImGui::End();
 // Record only real UI panels, not the pass-through dockspace. This
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Editable Polygon","Create Objects","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Editable Polygon","Create Objects","Materials","##N3DLiteTopToolbar","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
