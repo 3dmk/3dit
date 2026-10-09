@@ -586,7 +586,13 @@ while(!WindowShouldClose()){
  if(connectFeedback>0)connectFeedback--;
  int w=GetScreenWidth(),h=GetScreenHeight();
  // Panels are Dear ImGui windows; the central 3D viewport stays raylib.
- bool inView=!ImGui::GetIO().WantCaptureMouse && GetMousePosition().y>44.0f;
+ // The viewport is raylib-rendered behind ImGui's transparent dockspace.
+// WantCaptureMouse can remain true over the dock host and suppress all
+// Shift+click interactions. Use the actual viewport rectangle instead.
+ const Vector2 pointer=GetMousePosition();
+ const bool inView=pointer.x>=186.0f&&pointer.x<(float)(w-231)&&
+                   pointer.y>=44.0f&&pointer.y<(float)(h-27)&&
+                   !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
  bool typing=ImGui::GetIO().WantTextInput;
  if(!typing){
   // Delete the selected actor in Object mode. Component deletion remains in Editable Polygon.
