@@ -553,11 +553,21 @@ while(!WindowShouldClose()){
  }
  if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
   Vector2 m=GetMousePosition();
-  int axis=handleHit(m);
-  if(axis>=0)startDrag(axis);
-  else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
-  else if(targetWeldArmed){pickComponent(m);if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}
-  else if(selected>=0){rectanglePending=true;rectangleStart=m;rectangleEnd=m;}
+  const bool shift=IsKeyDown(KEY_LEFT_SHIFT)||IsKeyDown(KEY_RIGHT_SHIFT);
+  // Shift+click a polygon to extrude the face directly, without requiring
+  // an existing selection or activating the transform gizmo.
+  if(mode==3&&shift&&validComponent()){
+   pickComponent(m);
+   rectangleSelected.clear();
+   rectangleObject=selected;
+   if(face>=0&&face<(int)objects[selected].faces.size())extrude();
+  }else{
+   int axis=handleHit(m);
+   if(axis>=0)startDrag(axis);
+   else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
+   else if(targetWeldArmed){pickComponent(m);if(mode==1&&selected==targetWeldObject&&sub>=0)applyTargetWeld(sub);else targetWeldArmed=false;}
+   else if(selected>=0){rectanglePending=true;rectangleStart=m;rectangleEnd=m;}
+  }
  }
 if(rectanglePending&&IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
  rectangleEnd=GetMousePosition();
