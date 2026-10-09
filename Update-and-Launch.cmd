@@ -1,26 +1,25 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-rem Run a stable temporary copy: Git pull may replace this tracked batch file while it runs.
-if /I not "%~1"=="--worker" (
-  set "COREMODEL_ROOT=%~dp0"
-  set "COREMODEL_WORKER=%TEMP%\CoreModel-Update-%RANDOM%-%RANDOM%.cmd"
-  copy /Y "%~f0" "%COREMODEL_WORKER%" >nul
-  if errorlevel 1 (
-    echo ERROR: Could not create a temporary launcher copy.
-    pause
-    exit /b 1
-  )
-  call "%COREMODEL_WORKER%" --worker
-  set "COREMODEL_RESULT=%ERRORLEVEL%"
-  del /Q "%COREMODEL_WORKER%" >nul 2>&1
-  exit /b %COREMODEL_RESULT%
-)
-if not defined COREMODEL_ROOT (
-  echo ERROR: Missing project root from launcher.
-  pause
-  exit /b 1
-)
+rem Do not update a running CMD file in place. Execute a stable temporary worker.
+if /I "%~1"=="--worker" goto :worker
+set "COREMODEL_ROOT=%~dp0"
+set "COREMODEL_WORKER=%TEMP%\CoreModel-Update-%RANDOM%-%RANDOM%.cmd"
+copy /Y "%~f0" "%COREMODEL_WORKER%" >nul
+if errorlevel 1 goto :worker_copy_failed
+call "%COREMODEL_WORKER%" --worker
+set "COREMODEL_RESULT=%ERRORLEVEL%"
+del /Q "%COREMODEL_WORKER%" >nul 2>&1
+exit /b %COREMODEL_RESULT%
+
+:worker_copy_failed
+echo ERROR: Unable to create temporary launcher.
+pause
+exit /b 1
+
+:worker
+if not defined COREMODEL_ROOT goto :missing_root
 cd /d "%COREMODEL_ROOT%"
+if errorlevel 1 goto :missing_root
 title CoreModel - Update Build Launch
 echo.
 echo === CoreModel automatic updater ===
@@ -34,7 +33,10 @@ if errorlevel 1 goto :missing_cmake
 
 if not exist ".git" goto :not_git
 echo [1/4] Checking local source changes...
-for /f "delims=" %%A in ('git status --porcelain --untracked-files=no 2^>nul') do goto :dirty
+for /f "delims=" %%A in ('git status --porcelain --untracked-files=no 2^>nul') do goto :missing_root
+echo ERROR: Could not find CoreModel project folder.
+goto :failed
+:dirty
 
 echo [2/4] Updating from GitHub...
 git pull --ff-only origin main
