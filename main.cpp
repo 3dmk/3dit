@@ -58,7 +58,6 @@ void beginPolygonExtrude(Vector2 mouse){
  o.faces[face]=state.cap;
  for(size_t i=0;i<old.size();++i)
   o.faces.push_back({old[i],old[(i+1)%old.size()],state.cap[(i+1)%old.size()],state.cap[i]});
- rectangleSelected.clear();rectangleObject=selected;
 }
 void updatePolygonExtrude(){
  auto& state=polygonExtrudeDrag;
