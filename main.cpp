@@ -1464,12 +1464,6 @@ if(ImGui::Begin("Smoothing Groups")){
   MeshObject& o=objects[selected];
   ImGui::Text("Object: %s",o.name.c_str());
   ImGui::TextDisabled("Group 0 = Flat; groups 1-32 have independent smoothing values");
-  int group=o.smoothingGroup;
-  ImGui::SetNextItemWidth(100.0f);
-  if(ImGui::InputInt("Group number",&group,1,1)){
-   group=std::clamp(group,0,32);
-   if(group!=o.smoothingGroup){checkpoint();o.smoothingGroup=group;}
-  }
   // Compact drop-down replaces the 32-button grid.
   char selectedGroup[40];
   snprintf(selectedGroup,sizeof(selectedGroup),o.smoothingGroup==0?"0 - Flat":"%d - Smooth",o.smoothingGroup);
