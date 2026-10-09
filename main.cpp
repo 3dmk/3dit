@@ -1077,6 +1077,13 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  if(TransformIconButton("TopScale",3,tool==3))tool=3;
  ImGui::SameLine(0,12);
  ImGui::TextDisabled("Gizmo: %s | X / Y / Z",tool==1?"Move":tool==2?"Rotate":tool==3?"Scale":"None");
+ ImGui::SameLine(0,12);
+ if(selected>=0&&selected<(int)objects.size()){
+  const Vector3 coords=pivot(objects[selected]);
+  ImGui::Text("X: %.2f  Y: %.2f  Z: %.2f",coords.x,coords.y,coords.z);
+ }else{
+  ImGui::TextDisabled("X: --  Y: --  Z: --");
+ }
  ImGui::SameLine(0,18);
  ImGui::TextDisabled("Panels");
  ImGui::SameLine(0,8);
