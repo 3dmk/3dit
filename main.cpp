@@ -674,6 +674,46 @@ if(selected>=0&&selected<(int)objects.size()){
 rlDrawRenderBatchActive();
 rlEnableDepthTest();
 EndMode3D();
+// Target Weld direction guide: source vertex -> cursor, with destination snap feedback.
+// Draw as a 2D overlay so it stays visible above the shaded mesh.
+if(targetWeldArmed&&mode==1&&selected==targetWeldObject&&
+   selected>=0&&selected<(int)objects.size()&&
+   targetWeldSource>=0&&targetWeldSource<(int)objects[selected].vertices.size()){
+ const auto& weldMesh=objects[selected];
+ const Vector3 sourceWorld=world(weldMesh,targetWeldSource);
+ const Vector3 viewForward=Vector3Subtract(camera.target,camera.position);
+ if(Vector3DotProduct(Vector3Subtract(sourceWorld,camera.position),viewForward)>0.0f){
+  Vector2 start=GetWorldToScreen(sourceWorld,camera);
+  Vector2 end=GetMousePosition();
+  int snap=-1;
+  float snapDistance=16.0f;
+  for(int i=0;i<(int)weldMesh.vertices.size();++i){
+   if(i==targetWeldSource)continue;
+   const Vector3 candidate=world(weldMesh,i);
+   if(Vector3DotProduct(Vector3Subtract(candidate,camera.position),viewForward)<=0.0f)continue;
+   const Vector2 screen=GetWorldToScreen(candidate,camera);
+   const float distance=Vector2Distance(screen,end);
+   if(distance<snapDistance){snap=i;snapDistance=distance;}
+  }
+  const bool canWeld=snap>=0&&verticesSharePolygonEdge(weldMesh,targetWeldSource,snap);
+  if(snap>=0)end=GetWorldToScreen(world(weldMesh,snap),camera);
+  const Color guideColor=canWeld?Color{90,235,150,255}:
+                         snap>=0?Color{255,110,95,255}:Color{255,200,75,255};
+  const Vector2 delta=Vector2Subtract(end,start);
+  const float length=Vector2Length(delta);
+  if(length>1.0f){
+   DrawLineEx(start,end,2.5f,guideColor);
+   const Vector2 dir=Vector2Scale(delta,1.0f/length);
+   const Vector2 perp={-dir.y,dir.x};
+   const Vector2 base=Vector2Subtract(end,Vector2Scale(dir,12.0f));
+   DrawTriangle(end,Vector2Add(base,Vector2Scale(perp,5.0f)),
+                Vector2Subtract(base,Vector2Scale(perp,5.0f)),guideColor);
+  }
+  DrawCircleV(start,6.0f,Color{255,220,110,255});
+  DrawCircleLines((int)start.x,(int)start.y,8.0f,guideColor);
+  if(snap>=0)DrawCircleLines((int)end.x,(int)end.y,9.0f,guideColor);
+ }
+}
 // Screen-space vertex markers: fixed pixel radius regardless of camera zoom.
 // Render in 2D after the 3D scene, clipped to the central viewport.
 if(mode==1&&selected>=0&&selected<(int)objects.size()){
