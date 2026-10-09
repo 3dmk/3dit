@@ -595,9 +595,17 @@ while(!WindowShouldClose()){
 // WantCaptureMouse can remain true over the dock host and suppress all
 // Shift+click interactions. Use the actual viewport rectangle instead.
  const Vector2 pointer=GetMousePosition();
- const bool inView=pointer.x>=186.0f&&pointer.x<(float)(w-231)&&
-                   pointer.y>=44.0f&&pointer.y<(float)(h-27)&&
-                   !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
+ const // Use the actual dockspace central viewport, not hard-coded side-panel
+ // widths. A resized/docked panel must never limit extrusion to gizmo area.
+ bool inView=pointer.x>=0.0f&&pointer.x<(float)w&&
+             pointer.y>=44.0f&&pointer.y<(float)h&&
+             !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
+ if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(ImGui::GetID("CoreModelDockspace"))){
+  inView=inView&&pointer.x>=central->Pos.x&&
+         pointer.x<central->Pos.x+central->Size.x&&
+         pointer.y>=central->Pos.y&&
+         pointer.y<central->Pos.y+central->Size.y;
+ }
  bool typing=ImGui::GetIO().WantTextInput;
  if(!typing){
   // Delete the selected actor in Object mode. Component deletion remains in Editable Polygon.
