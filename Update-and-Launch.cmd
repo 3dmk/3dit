@@ -3,7 +3,7 @@ setlocal EnableExtensions DisableDelayedExpansion
 rem Do not update a running CMD file in place. Execute a stable temporary worker.
 if /I "%~1"=="--worker" goto :worker
 set "COREMODEL_ROOT=%~dp0"
-set "COREMODEL_WORKER=%TEMP%\CoreModel-Update-%RANDOM%-%RANDOM%.cmd"
+set "COREMODEL_WORKER=%TEMP%\N3DLite-Update-%RANDOM%-%RANDOM%.cmd"
 copy /Y "%~f0" "%COREMODEL_WORKER%" >nul
 if errorlevel 1 goto :worker_copy_failed
 call "%COREMODEL_WORKER%" --worker
@@ -20,16 +20,16 @@ exit /b 1
 if not defined COREMODEL_ROOT goto :missing_root
 cd /d "%COREMODEL_ROOT%"
 if errorlevel 1 goto :missing_root
-title CoreModel - Update Build Launch
+title N3DLite - Update Build Launch
 rem The splash is cosmetic: failures still appear in this console.
-set "COREMODEL_SPLASH_SIGNAL=%TEMP%\CoreModel-Splash-%RANDOM%-%RANDOM%.done"
+set "COREMODEL_SPLASH_SIGNAL=%TEMP%\N3DLite-Splash-%RANDOM%-%RANDOM%.done"
 set "COREMODEL_SPLASH_PROGRESS=%COREMODEL_SPLASH_SIGNAL%.progress"
 call :progress 5 Checking project tools...
-if exist "CoreModel-Splash.ps1" (
-  start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\CoreModel-Splash.ps1" -SignalFile "%COREMODEL_SPLASH_SIGNAL%" -ProgressFile "%COREMODEL_SPLASH_PROGRESS%"
+if exist "N3DLite-Splash.ps1" (
+  start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\N3DLite-Splash.ps1" -SignalFile "%COREMODEL_SPLASH_SIGNAL%" -ProgressFile "%COREMODEL_SPLASH_PROGRESS%"
 )
 echo.
-echo === CoreModel automatic updater ===
+echo === N3DLite automatic updater ===
 echo Project: %CD%
 echo.
 
@@ -50,8 +50,8 @@ if errorlevel 1 goto :failed
 
 rem Skip compilation when the previously verified build matches this source revision.
 for /f %%H in ('git rev-parse HEAD 2^>nul') do set "COREMODEL_REVISION=%%H"
-if exist "build\Release\CoreModel.exe" if exist "build\Release\CoreModel-built-revision.txt" (
-  set /p COREM_MODEL_BUILT=<"build\Release\CoreModel-built-revision.txt"
+if exist "build\Release\N3DLite.exe" if exist "build\Release\N3DLite-built-revision.txt" (
+  set /p COREM_MODEL_BUILT=<"build\Release\N3DLite-built-revision.txt"
   call :check_build_revision
   if not errorlevel 1 goto :launch
 )
@@ -64,31 +64,31 @@ if exist "build\CMakeCache.txt" (
 )
 if errorlevel 1 goto :failed
 
-call :progress 65 Building CoreModel...
-echo [4/4] Building CoreModel.exe...
+call :progress 65 Building N3DLite...
+echo [4/4] Building N3DLite.exe...
 rem Preserve the last available executable before rebuilding; never overwrite this backup automatically.
-if exist "build\Release\CoreModel.exe" if not exist "KnownGood\CoreModel.exe" (
+if exist "build\Release\N3DLite.exe" if not exist "KnownGood\N3DLite.exe" (
   if not exist "KnownGood" mkdir "KnownGood"
-  copy /Y "build\Release\CoreModel.exe" "KnownGood\CoreModel.exe" >nul
+  copy /Y "build\Release\N3DLite.exe" "KnownGood\N3DLite.exe" >nul
   if errorlevel 1 echo WARNING: Could not save KnownGood backup.
 )
 rem Capture the actual build output so we only retry a known corrupt-library error.
-cmake --build build --config Release --parallel 2 > "CoreModel-build.log" 2>&1
+cmake --build build --config Release --parallel 2 > "N3DLite-build.log" 2>&1
 set "BUILD_RESULT=%ERRORLEVEL%"
-type "CoreModel-build.log"
+type "N3DLite-build.log"
 if "%BUILD_RESULT%"=="0" goto :build_ok
-findstr /C:"LNK1136" "CoreModel-build.log" >nul 2>&1
+findstr /C:"LNK1136" "N3DLite-build.log" >nul 2>&1
 if errorlevel 1 goto :failed
 echo.
 echo [Recovery] LNK1136 detected: rebuilding all generated libraries once...
-cmake --build build --config Release --clean-first --parallel 2 > "CoreModel-build-recovery.log" 2>&1
+cmake --build build --config Release --clean-first --parallel 2 > "N3DLite-build-recovery.log" 2>&1
 set "RECOVERY_RESULT=%ERRORLEVEL%"
-type "CoreModel-build-recovery.log"
+type "N3DLite-build-recovery.log"
 if not "%RECOVERY_RESULT%"=="0" goto :failed
 :build_ok
 call :progress 95 Finalizing build...
-if not exist "build\Release\CoreModel.exe" goto :missing_exe
->"build\Release\CoreModel-built-revision.txt" echo %COREMODEL_REVISION%
+if not exist "build\Release\N3DLite.exe" goto :missing_exe
+>"build\Release\N3DLite-built-revision.txt" echo %COREMODEL_REVISION%
 goto :launch
 
 :check_build_revision
@@ -97,13 +97,13 @@ if "%COREM_MODEL_BUILT%"=="%COREMODEL_REVISION%" exit /b 0
 exit /b 1
 
 :launch
-call :progress 100 Launching CoreModel...
+call :progress 100 Launching N3DLite...
 call :close_splash
 echo.
-echo CoreModel is up to date; launching editor.
+echo N3DLite is up to date; launching editor.
 echo Source revision:
 git rev-parse --short HEAD
-start "" /D "%CD%" "%CD%\build\Release\CoreModel.exe"
+start "" /D "%CD%" "%CD%\build\Release\N3DLite.exe"
 if errorlevel 1 goto :failed
 exit /b 0
 
@@ -137,10 +137,10 @@ goto :failed
 echo ERROR: This folder is not the GitHub checkout.
 goto :failed
 :missing_exe
-echo ERROR: Build completed but CoreModel.exe was not found.
+echo ERROR: Build completed but N3DLite.exe was not found.
 :failed
 call :close_splash
 echo.
-echo CoreModel update/build failed. Nothing will be launched.
+echo N3DLite update/build failed. Nothing will be launched.
 pause
 exit /b 1
