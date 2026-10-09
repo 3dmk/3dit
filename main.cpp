@@ -706,12 +706,8 @@ while(!WindowShouldClose()){
   // Arm extrusion on mouse-down; create geometry only after a real drag.
   // This also tolerates Shift being pressed just after the mouse button.
   if(mode==3&&validComponent()&&shift){
-   // Prefer the polygon directly under the pointer, but preserve the
-   // current polygon selection when dragging from its transform handle.
-   const int previouslySelectedFace=face;
+   // Only the polygon under the pointer can start a new extrusion.
    pickComponent(m);
-   if(face<0&&previouslySelectedFace>=0&&previouslySelectedFace<(int)objects[selected].faces.size())
-    face=previouslySelectedFace;
    polygonExtrudePending=face>=0;
    polygonExtrudeFace=face;
    polygonExtrudePress=m;
@@ -720,20 +716,15 @@ while(!WindowShouldClose()){
     rectangleSelected.clear();rectangleObject=-1;
    }
   }else{
-   // In subobject mode, a click on geometry selects that component.
-   // Only an actual gizmo hit should begin a transform.
-   // Component picking has priority over gizmo hit-testing; otherwise
-   // a gizmo overlapping a vertex/edge/face steals the selection click.
-   // Gizmo handles are screen-space targets, including portions outside
-   // the actor silhouette. Always test them in every selection mode.
-   // Geometry selection wins over gizmo picking inside the mesh.
-   // The gizmo remains draggable outside the mesh silhouette.
+   // Component selection takes precedence over overlapping gizmo handles.
+   // Handles outside geometry remain available for transforms.
    int axis=handleHit(m);
-   if(mode==3&&axis>=0){
-    const int oldFace=face;
+   if(mode!=0&&validComponent()&&axis>=0){
+    const int savedSub=sub, savedFace=face;
     pickComponent(m);
-    if(face>=0)axis=-1;
-    face=oldFace;
+    const bool componentHit=(mode==3)?face>=0:sub>=0;
+    sub=savedSub;face=savedFace;
+    if(componentHit)axis=-1;
    }
    if(axis>=0)startDrag(axis);
    else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
