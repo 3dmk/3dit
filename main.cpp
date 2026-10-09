@@ -716,15 +716,21 @@ while(!WindowShouldClose()){
     rectangleSelected.clear();rectangleObject=-1;
    }
   }else{
-   // Component selection takes precedence over overlapping gizmo handles.
-   // Handles outside geometry remain available for transforms.
+   // Visible transform handles must remain pickable over the mesh.
+   // Prioritize the arrow/cube endpoint, then allow component picking
+   // over the thin axis shaft. Rotation rings are direct gizmo targets.
    int axis=handleHit(m);
-   if(mode!=0&&validComponent()&&axis>=0){
-    const int savedSub=sub, savedFace=face;
-    pickComponent(m);
-    const bool componentHit=(mode==3)?face>=0:sub>=0;
-    sub=savedSub;face=savedFace;
-    if(componentHit)axis=-1;
+   if(axis>=0&&mode!=0&&tool!=2){
+    Vector3 handleDirection{};(&handleDirection.x)[axis]=1.6f;
+    const Vector2 endpoint=GetWorldToScreen(Vector3Add(pivot(objects[selected]),handleDirection),camera);
+    const bool onHandle=Vector2Distance(m,endpoint)<=20.0f;
+    if(!onHandle){
+     const int savedSub=sub,savedFace=face;
+     pickComponent(m);
+     const bool componentHit=(mode==3)?face>=0:sub>=0;
+     sub=savedSub;face=savedFace;
+     if(componentHit)axis=-1;
+    }
    }
    if(axis>=0)startDrag(axis);
    else if(mode==0){pick(m);sub=-1;rectangleSelected.clear();}
