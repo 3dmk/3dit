@@ -22,6 +22,67 @@ MeshObject plane(){return {"Plane",{{-1,-1,0},{1,-1,0},{1,1,0},{-1,1,0}},{{0,1,2
 MeshObject sphere(){MeshObject o;o.name="Sphere";constexpr int N=16,R=10;for(int j=0;j<=R;j++){float p=PI*j/R;for(int i=0;i<N;i++){float t=2*PI*i/N;o.vertices.push_back({sinf(p)*cosf(t),sinf(p)*sinf(t),cosf(p)});}}for(int j=0;j<R;j++)for(int i=0;i<N;i++)o.faces.push_back({j*N+i,j*N+(i+1)%N,(j+1)*N+(i+1)%N,(j+1)*N+i});return o;}
 Vector3 world(const MeshObject&o,int i){return Vector3Add(o.vertices[i],o.position);}
 void extrude(){if(selected<0||face<0||mode!=3)return;checkpoint();auto&o=objects[selected];auto old=o.faces[face];if(old.size()<3)return;Vector3 a=o.vertices[old[0]],b=o.vertices[old[1]],c=o.vertices[old[2]];Vector3 n=Vector3Normalize(Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a)));std::vector<int> top;for(int i:old){top.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Add(o.vertices[i],Vector3Scale(n,.5f)));}o.faces[face]=top;for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],top[(i+1)%top.size()],top[i]});}
+// Interactive polygon extrusion: create side walls at zero height, then move
+// only the new cap vertices as the pointer moves. One undo checkpoint per drag.
+struct PolygonExtrudeDrag {
+ bool active=false;
+ int object=-1;
+ Vector2 start{};
+ Vector3 normal{};
+ Vector3 center{};
+ std::vector<int> cap;
+ std::vector<Vector3> base;
+};
+PolygonExtrudeDrag polygonExtrudeDrag;
+void beginPolygonExtrude(Vector2 mouse){
+ if(mode!=3||selected<0||selected>=(int)objects.size())return;
+ auto& o=objects[selected];
+ if(face<0||face>=(int)o.faces.size())return;
+ const auto old=o.faces[face];
+ if(old.size()<3)return;
+ const Vector3 a=o.vertices[old[0]],b=o.vertices[old[1]],c=o.vertices[old[2]];
+ Vector3 normal=Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
+ if(Vector3Length(normal)<0.00001f)return;
+ normal=Vector3Normalize(normal);
+ checkpoint();
+ polygonExtrudeDrag={};
+ auto& state=polygonExtrudeDrag;
+ state.active=true;state.object=selected;state.start=mouse;state.normal=normal;
+ for(int i:old){
+  state.cap.push_back((int)o.vertices.size());
+  state.base.push_back(o.vertices[i]);
+  state.center=Vector3Add(state.center,o.vertices[i]);
+  o.vertices.push_back(o.vertices[i]);
+ }
+ state.center=Vector3Scale(state.center,1.0f/(float)old.size());
+ o.faces[face]=state.cap;
+ for(size_t i=0;i<old.size();++i)
+  o.faces.push_back({old[i],old[(i+1)%old.size()],state.cap[(i+1)%old.size()],state.cap[i]});
+ rectangleSelected.clear();rectangleObject=selected;
+}
+void updatePolygonExtrude(){
+ auto& state=polygonExtrudeDrag;
+ if(!state.active||state.object<0||state.object>=(int)objects.size())return;
+ auto& o=objects[state.object];
+ const Vector3 centerWorld=Vector3Add(state.center,o.position);
+ const Vector2 p0=GetWorldToScreen(centerWorld,camera);
+ const Vector2 p1=GetWorldToScreen(Vector3Add(centerWorld,state.normal),camera);
+ const Vector2 screenAxis=Vector2Subtract(p1,p0);
+ const float axisSquared=Vector2DotProduct(screenAxis,screenAxis);
+ const Vector2 delta=Vector2Subtract(GetMousePosition(),state.start);
+ // Use the projected face normal for world-space distance. For normals
+ // almost parallel to the view direction, use vertical drag as a fallback.
+ const float distance=axisSquared>16.0f
+  ?Vector2DotProduct(delta,screenAxis)/axisSquared
+  :-delta.y*0.01f*Vector3Distance(camera.position,centerWorld);
+ for(size_t i=0;i<state.cap.size();++i)
+  o.vertices[state.cap[i]]=Vector3Add(state.base[i],Vector3Scale(state.normal,distance));
+}
+void endPolygonExtrude(){
+ polygonExtrudeDrag.active=false;
+ polygonExtrudeDrag.cap.clear();
+ polygonExtrudeDrag.base.clear();
+}
 void inset(){if(selected<0||face<0||mode!=3)return;checkpoint();auto&o=objects[selected];auto old=o.faces[face];Vector3 c{};for(int i:old)c=Vector3Add(c,o.vertices[i]);c=Vector3Scale(c,1.0f/old.size());std::vector<int> inner;for(int i:old){inner.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Lerp(c,o.vertices[i],.7f));}o.faces[face]=inner;for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],inner[(i+1)%inner.size()],inner[i]});}
 
 bool validComponent(){return selected>=0&&selected<(int)objects.size();}
@@ -554,13 +615,10 @@ while(!WindowShouldClose()){
  if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
   Vector2 m=GetMousePosition();
   const bool shift=IsKeyDown(KEY_LEFT_SHIFT)||IsKeyDown(KEY_RIGHT_SHIFT);
-  // Shift+click a polygon to extrude the face directly, without requiring
-  // an existing selection or activating the transform gizmo.
+  // Shift+left-drag extrudes the clicked polygon by the actual drag distance.
   if(mode==3&&shift&&validComponent()){
    pickComponent(m);
-   rectangleSelected.clear();
-   rectangleObject=selected;
-   if(face>=0&&face<(int)objects[selected].faces.size())extrude();
+   beginPolygonExtrude(m);
   }else{
    int axis=handleHit(m);
    if(axis>=0)startDrag(axis);
@@ -569,6 +627,10 @@ while(!WindowShouldClose()){
    else if(selected>=0){rectanglePending=true;rectangleStart=m;rectangleEnd=m;}
   }
  }
+if(polygonExtrudeDrag.active){
+ if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))updatePolygonExtrude();
+ else endPolygonExtrude();
+}
 if(rectanglePending&&IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
  rectangleEnd=GetMousePosition();
  if(Vector2Distance(rectangleStart,rectangleEnd)>5.0f)rectangleDragging=true;
