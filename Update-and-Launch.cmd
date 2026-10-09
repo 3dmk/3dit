@@ -17,13 +17,7 @@ pause
 exit /b 1
 
 :worker
-if not defined COREMODEL_ROOT goto :close_splash
-if defined COREMODEL_SPLASH_SIGNAL (
-  >"%COREMODEL_SPLASH_SIGNAL%" echo done
-)
-exit /b 0
-
-:missing_root
+if not defined COREMODEL_ROOT goto :missing_root
 cd /d "%COREMODEL_ROOT%"
 if errorlevel 1 goto :missing_root
 title CoreModel - Update Build Launch
@@ -79,7 +73,6 @@ type "CoreModel-build.log"
 if "%BUILD_RESULT%"=="0" goto :build_ok
 findstr /C:"LNK1136" "CoreModel-build.log" >nul 2>&1
 if errorlevel 1 goto :failed
-call :close_splash
 echo.
 echo [Recovery] LNK1136 detected: rebuilding all generated libraries once...
 cmake --build build --config Release --clean-first --parallel 2 > "CoreModel-build-recovery.log" 2>&1
@@ -112,6 +105,12 @@ start "" /D "%CD%" "%CD%\build\Release\CoreModel.exe"
 if errorlevel 1 goto :failed
 exit /b 0
 
+:close_splash
+if defined COREMODEL_SPLASH_SIGNAL (
+  >"%COREMODEL_SPLASH_SIGNAL%" echo done
+)
+exit /b 0
+
 :missing_root
 echo ERROR: Could not locate the CoreModel project folder.
 goto :failed
@@ -133,6 +132,7 @@ goto :failed
 :missing_exe
 echo ERROR: Build completed but CoreModel.exe was not found.
 :failed
+call :close_splash
 echo.
 echo CoreModel update/build failed. Nothing will be launched.
 pause
