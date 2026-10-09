@@ -1429,8 +1429,20 @@ if(ImGui::Begin("Smoothing Groups")){
   ImGui::Text("Object: %s",o.name.c_str());
   ImGui::TextDisabled("0 = Flat; 1-32 = Smooth");
   int group=o.smoothingGroup;
-  if(ImGui::SliderInt("Group",&group,0,32)){
-   checkpoint();o.smoothingGroup=group;
+  ImGui::SetNextItemWidth(100.0f);
+  if(ImGui::InputInt("Group number",&group,1,1)){
+   group=std::clamp(group,0,32);
+   if(group!=o.smoothingGroup){checkpoint();o.smoothingGroup=group;}
+  }
+  ImGui::TextDisabled("Choose a numbered smoothing group:");
+  for(int g=1;g<=32;g++){
+   ImGui::PushID(g);
+   if((g-1)%8!=0)ImGui::SameLine(0,3);
+   if(g==o.smoothingGroup)ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.34f,0.48f,0.63f,1.0f));
+   char number[8];snprintf(number,sizeof(number),"%d",g);
+   if(ImGui::Button(number,ImVec2(32,27))&&o.smoothingGroup!=g){checkpoint();o.smoothingGroup=g;}
+   if(g==o.smoothingGroup)ImGui::PopStyleColor();
+   ImGui::PopID();
   }
   if(ImGui::Button("Flat Shading",ImVec2(-1,0))&&o.smoothingGroup!=0){checkpoint();o.smoothingGroup=0;}
   if(ImGui::Button("Smooth Shading",ImVec2(-1,0))&&o.smoothingGroup==0){checkpoint();o.smoothingGroup=1;}
