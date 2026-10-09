@@ -12,7 +12,7 @@
 #include <map>
 #include <utility>
 #include <fstream>
-struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;};
+struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;int smoothingGroup=0;};
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 Color meshMaterialColor(const MeshObject& o){
@@ -24,9 +24,9 @@ Color meshMaterialColor(const MeshObject& o){
 }
 // Lightweight viewport Blinn-Phong approximation: live roughness, metalness and specular.
 // This is not a physically based BRDF; it provides responsive material previews.
-Color shadeMaterialTriangle(const MeshObject& o,Vector3 a,Vector3 b,Vector3 c,Vector3 cameraPosition){
+Color shadeMaterialTriangle(const MeshObject& o,Vector3 a,Vector3 b,Vector3 c,Vector3 cameraPosition,Vector3 suppliedNormal={0,0,0}){
  const EditorMaterial& m=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
- Vector3 n=Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
+ Vector3 n=Vector3Length(suppliedNormal)>1e-7f?suppliedNormal:Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
  if(Vector3Length(n)<1e-7f)return meshMaterialColor(o);
  n=Vector3Normalize(n);
  Vector3 center=Vector3Scale(Vector3Add(Vector3Add(a,b),c),1.0f/3.0f);
@@ -1076,11 +1076,46 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 // Ground axes use the neutral grid palette; reserve RGB for transform gizmos.
-for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{215,45,50,255}:meshMaterialColor(o);for(size_t j=1;j+1<f.size();j++){
- Vector3 a=world(o,f[0]),b=world(o,f[j]),c=world(o,f[j+1]);
- Color shaded=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?color:shadeMaterialTriangle(o,a,b,c,camera.position);
- DrawTriangle3D(a,b,c,shaded);
-}for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{255,92,92,255}:Color{78,82,88,255});}}
+// Smooth groups: 0 = flat, positive group = average normals at shared vertices.
+// This editor currently assigns one group to the entire object.
+for(int oi=0;oi<(int)objects.size();oi++){
+ auto& o=objects[oi];
+ std::vector<Vector3> smooth(o.vertices.size(),Vector3{0,0,0});
+ if(o.smoothingGroup>0){
+  for(const auto& f:o.faces){
+   if(f.size()<3)continue;
+   Vector3 normal{};
+   for(size_t j=1;j+1<f.size();j++)
+    normal=Vector3Add(normal,Vector3CrossProduct(Vector3Subtract(o.vertices[f[j]],o.vertices[f[0]]),Vector3Subtract(o.vertices[f[j+1]],o.vertices[f[0]])));
+   for(int vi:f)if(vi>=0&&vi<(int)smooth.size())smooth[vi]=Vector3Add(smooth[vi],normal);
+  }
+  for(auto& n:smooth)if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
+ }
+ for(int fi=0;fi<(int)o.faces.size();fi++){
+  const auto& f=o.faces[fi];
+  if(f.size()<3)continue;
+  bool highlighted=oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0));
+  for(size_t j=1;j+1<f.size();j++){
+   int ids[3]={f[0],f[j],f[j+1]};
+   Vector3 a=world(o,ids[0]),b=world(o,ids[1]),c=world(o,ids[2]);
+   if(highlighted||o.smoothingGroup==0){
+    Color color=highlighted?Color{215,45,50,255}:shadeMaterialTriangle(o,a,b,c,camera.position);
+    DrawTriangle3D(a,b,c,color);
+   }else{
+    Vector3 p[3]={a,b,c};
+    rlBegin(RL_TRIANGLES);
+    for(int k=0;k<3;k++){
+     Color color=shadeMaterialTriangle(o,p[k],p[(k+1)%3],p[(k+2)%3],camera.position,smooth[ids[k]]);
+     rlColor4ub(color.r,color.g,color.b,color.a);
+     rlVertex3f(p[k].x,p[k].y,p[k].z);
+    }
+    rlEnd();
+   }
+  }
+  for(size_t j=0;j<f.size();j++)
+   DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:Color{78,82,88,255});
+ }
+}
 // Draw the selected transform overlay only after all opaque object geometry.
 if(selected>=0&&selected<(int)objects.size()){
  auto& o=objects[selected];
@@ -1261,6 +1296,7 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
  ImGui::DockBuilderDockWindow("Materials",bottomLeft);
+ ImGui::DockBuilderDockWindow("Smoothing Groups",bottomLeft);
  ImGui::DockBuilderFinish(dockId);
 }
 ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
@@ -1387,6 +1423,21 @@ if(ImGui::Begin("Create Objects")){
 }
 ImGui::End();
 // Material library and object assignment; viewport base color is live.
+if(ImGui::Begin("Smoothing Groups")){
+ if(selected>=0&&selected<(int)objects.size()){
+  MeshObject& o=objects[selected];
+  ImGui::Text("Object: %s",o.name.c_str());
+  ImGui::TextDisabled("0 = Flat; 1-32 = Smooth");
+  int group=o.smoothingGroup;
+  if(ImGui::SliderInt("Group",&group,0,32)){
+   checkpoint();o.smoothingGroup=group;
+  }
+  if(ImGui::Button("Flat Shading",ImVec2(-1,0))&&o.smoothingGroup!=0){checkpoint();o.smoothingGroup=0;}
+  if(ImGui::Button("Smooth Shading",ImVec2(-1,0))&&o.smoothingGroup==0){checkpoint();o.smoothingGroup=1;}
+  ImGui::TextWrapped("Smooths shared vertex normals within this object. Group IDs are object-wide for now.");
+ }else ImGui::TextDisabled("Select an object to edit smoothing");
+}
+ImGui::End();
 if(ImGui::Begin("Materials")){
  if(ImGui::Button("New Material")){
   EditorMaterial m; m.name="Material "+std::to_string(materials.size());
@@ -1426,7 +1477,7 @@ ImGui::End();
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Editable Polygon","Create Objects","Materials","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Editable Polygon","Create Objects","Materials","Smoothing Groups","##N3DLiteTopToolbar","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
