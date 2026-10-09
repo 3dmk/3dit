@@ -518,7 +518,7 @@ ImGui::StyleColorsDark();
 if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFontLoaded=uiFont.texture.id!=0;}
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
 int connectFeedback=0;
-bool showProperties=true,showAI=true;
+bool showProperties=true;
 bool crosshairCursorHidden=false;
 
 while(!WindowShouldClose()){
@@ -748,7 +748,6 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
  ImGui::DockBuilderDockWindow("Properties",right);
- ImGui::DockBuilderDockWindow("CoreModel AI",right);
  ImGui::DockBuilderFinish(dockId);
 }
 ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
@@ -773,8 +772,6 @@ if(ImGui::Begin("##CoreModelTopToolbar",nullptr,toolbarFlags)){
  ImGui::TextDisabled("Panels");
  ImGui::SameLine(0,8);
  if(ImGui::Button(showProperties?"Hide Properties":"Properties"))showProperties=!showProperties;
- ImGui::SameLine();
- if(ImGui::Button(showAI?"Hide CoreModel AI":"CoreModel AI"))showAI=!showAI;
  ImGui::SameLine();
  if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
  if(connectFeedback>0){ImGui::SameLine();ImGui::TextUnformatted("Copied");}
@@ -865,16 +862,6 @@ if(ImGui::Begin("Properties")){
   ImGui::Text("Selected vertex/edge: %d",sub);
   ImGui::Text("Selected face: %d",face);
  }else ImGui::TextUnformatted("No object selected.");
-}
-ImGui::End();
-}
-if(showAI){
-
-
-if(ImGui::Begin("CoreModel AI")){
- if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
- if(connectFeedback>0)ImGui::TextUnformatted("Connection request copied.");
- ImGui::TextDisabled("GitHub workflow - local build required");
 }
 ImGui::End();
 }
