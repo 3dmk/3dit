@@ -59,7 +59,35 @@ void undo(){if(undoStack.empty())return;redoStack.push_back({objects,selected,fa
 void redo(){if(redoStack.empty())return;undoStack.push_back({objects,selected,face,sub});auto s=redoStack.back();redoStack.pop_back();objects=s.objects;selected=s.selected;face=s.face;sub=s.sub;}
 MeshObject box(){return {"Box",{{-1,-1,-1},{1,-1,-1},{1,1,-1},{-1,1,-1},{-1,-1,1},{1,-1,1},{1,1,1},{-1,1,1}},{{0,3,2,1},{4,5,6,7},{0,1,5,4},{1,2,6,5},{2,3,7,6},{3,0,4,7}}};}
 MeshObject plane(){return {"Plane",{{-1,-1,0},{1,-1,0},{1,1,0},{-1,1,0}},{{0,1,2,3}}};}
-MeshObject sphere(){MeshObject o;o.name="Sphere";constexpr int N=16,R=10;for(int j=0;j<=R;j++){float p=PI*j/R;for(int i=0;i<N;i++){float t=2*PI*i/N;o.vertices.push_back({sinf(p)*cosf(t),sinf(p)*sinf(t),cosf(p)});}}for(int j=0;j<R;j++)for(int i=0;i<N;i++)o.faces.push_back({j*N+i,j*N+(i+1)%N,(j+1)*N+(i+1)%N,(j+1)*N+i});return o;}
+MeshObject sphere(){
+ MeshObject o;o.name="Sphere";
+ constexpr int N=24,R=12;
+ // Single pole vertices avoid zero-area faces; rings have outward winding.
+ const int top=0;
+ o.vertices.push_back({0,0,1});
+ for(int j=1;j<R;j++){
+  const float p=PI*j/R;
+  for(int i=0;i<N;i++){
+   const float t=2.0f*PI*i/N;
+   o.vertices.push_back({sinf(p)*cosf(t),sinf(p)*sinf(t),cosf(p)});
+  }
+ }
+ const int bottom=(int)o.vertices.size();
+ o.vertices.push_back({0,0,-1});
+ auto ring=[&](int j,int i){return 1+(j-1)*N+(i+N)%N;};
+ for(int i=0;i<N;i++)o.faces.push_back({top,ring(1,i),ring(1,i+1)});
+ for(int j=1;j<R-1;j++)for(int i=0;i<N;i++)
+  o.faces.push_back({ring(j,i),ring(j+1,i),ring(j+1,i+1),ring(j,i+1)});
+ for(int i=0;i<N;i++)o.faces.push_back({ring(R-1,i),bottom,ring(R-1,i+1)});
+ // Validate orientation against the sphere center rather than relying on winding guesses.
+ for(auto& face:o.faces){
+  Vector3 a=o.vertices[face[0]],b=o.vertices[face[1]],c=o.vertices[face[2]];
+  Vector3 n=Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
+  Vector3 center=Vector3Scale(Vector3Add(Vector3Add(a,b),c),1.0f/3.0f);
+  if(Vector3DotProduct(n,center)<0.0f)std::reverse(face.begin(),face.end());
+ }
+ return o;
+}
 Vector3 world(const MeshObject&o,int i){return Vector3Add(o.vertices[i],o.position);}
 void extrude(){if(selected<0||face<0||mode!=3)return;checkpoint();auto&o=objects[selected];auto old=o.faces[face];if(old.size()<3)return;Vector3 a=o.vertices[old[0]],b=o.vertices[old[1]],c=o.vertices[old[2]];Vector3 n=Vector3Normalize(Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a)));std::vector<int> top;for(int i:old){top.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Add(o.vertices[i],Vector3Scale(n,.5f)));}o.faces[face]=top;for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],top[(i+1)%top.size()],top[i]});}
 // Interactive polygon extrusion: create side walls at zero height, then move
