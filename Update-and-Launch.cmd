@@ -1,146 +1,117 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-rem Do not update a running CMD file in place. Execute a stable temporary worker.
+rem N3DLite update/build/launch. Run from a temporary copy to permit git pull.
 if /I "%~1"=="--worker" goto :worker
-set "COREMODEL_ROOT=%~dp0"
-set "COREMODEL_WORKER=%TEMP%\N3DLite-Update-%RANDOM%-%RANDOM%.cmd"
-copy /Y "%~f0" "%COREMODEL_WORKER%" >nul
-if errorlevel 1 goto :worker_copy_failed
-call "%COREMODEL_WORKER%" --worker
-set "COREMODEL_RESULT=%ERRORLEVEL%"
-del /Q "%COREMODEL_WORKER%" >nul 2>&1
-exit /b %COREMODEL_RESULT%
-
-:worker_copy_failed
-echo ERROR: Unable to create temporary launcher.
-pause
-exit /b 1
+set "N3D_ROOT=%~dp0"
+set "N3D_WORKER=%TEMP%\N3DLite-Update-%RANDOM%-%RANDOM%.cmd"
+copy /Y "%~f0" "%N3D_WORKER%" >nul
+if errorlevel 1 (
+ echo ERROR: Cannot create temporary launcher.
+ pause
+ exit /b 1
+)
+call "%N3D_WORKER%" --worker
+set "N3D_RESULT=%ERRORLEVEL%"
+del /Q "%N3D_WORKER%" >nul 2>&1
+exit /b %N3D_RESULT%
 
 :worker
-if not defined COREMODEL_ROOT goto :missing_root
-cd /d "%COREMODEL_ROOT%"
-if errorlevel 1 goto :missing_root
-title N3DLite - Update Build Launch
-rem The splash is cosmetic: failures still appear in this console.
-set "COREMODEL_SPLASH_SIGNAL=%TEMP%\N3DLite-Splash-%RANDOM%-%RANDOM%.done"
-set "COREMODEL_SPLASH_PROGRESS=%COREMODEL_SPLASH_SIGNAL%.progress"
-call :progress 5 Checking project tools...
+if not defined N3D_ROOT goto :failed
+cd /d "%N3D_ROOT%"
+if errorlevel 1 goto :failed
+title N3DLite - Update and Launch
+set "N3D_SIGNAL=%TEMP%\N3DLite-Splash-%RANDOM%-%RANDOM%.done"
+set "N3D_PROGRESS=%N3D_SIGNAL%.progress"
+call :progress 5 "Checking project tools..."
 if exist "N3DLite-Splash.ps1" (
-  start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\N3DLite-Splash.ps1" -SignalFile "%COREMODEL_SPLASH_SIGNAL%" -ProgressFile "%COREMODEL_SPLASH_PROGRESS%"
+ start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\N3DLite-Splash.ps1" -SignalFile "%N3D_SIGNAL%" -ProgressFile "%N3D_PROGRESS%"
 )
-echo.
-echo === N3DLite automatic updater ===
+echo === N3DLite Update and Launch ===
 echo Project: %CD%
-echo.
-
 where git.exe >nul 2>&1
-if errorlevel 1 goto :missing_git
+if errorlevel 1 (
+ echo ERROR: Git not found.
+ goto :failed
+)
 where cmake.exe >nul 2>&1
-if errorlevel 1 goto :missing_cmake
-
-if not exist ".git" goto :not_git
-call :progress 15 Checking local changes...
-echo [1/4] Checking local source changes...
+if errorlevel 1 (
+ echo ERROR: CMake not found.
+ goto :failed
+)
+if not exist ".git" (
+ echo ERROR: Not a Git checkout.
+ goto :failed
+)
+call :progress 15 "Checking local changes..."
 for /f "delims=" %%A in ('git status --porcelain --untracked-files=no 2^>nul') do goto :dirty
-
-call :progress 30 Updating from GitHub...
-echo [2/4] Updating from GitHub...
+call :progress 30 "Updating from GitHub..."
 git pull --ff-only origin main
 if errorlevel 1 goto :failed
-
-rem Skip compilation when the previously verified build matches this source revision.
-for /f %%H in ('git rev-parse HEAD 2^>nul') do set "COREMODEL_REVISION=%%H"
+for /f %%H in ('git rev-parse HEAD 2^>nul') do set "N3D_REVISION=%%H"
+if not defined N3D_REVISION goto :failed
 if exist "build\Release\N3DLite.exe" if exist "build\Release\N3DLite-built-revision.txt" (
-  set /p COREM_MODEL_BUILT=<"build\Release\N3DLite-built-revision.txt"
-  call :check_build_revision
-  if not errorlevel 1 goto :launch
+ set /p N3D_BUILT=<"build\Release\N3DLite-built-revision.txt"
+ call :check_revision
+ if not errorlevel 1 goto :launch
 )
-call :progress 50 Configuring build...
-echo [3/4] Configuring build...
+call :progress 50 "Configuring build..."
 if exist "build\CMakeCache.txt" (
-  cmake -S . -B build
+ cmake -S . -B build
 ) else (
-  cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+ cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 )
 if errorlevel 1 goto :failed
-
-call :progress 65 Building N3DLite...
-echo [4/4] Building N3DLite.exe...
-rem Preserve the last available executable before rebuilding; never overwrite this backup automatically.
+call :progress 65 "Building N3DLite..."
 if exist "build\Release\N3DLite.exe" if not exist "KnownGood\N3DLite.exe" (
-  if not exist "KnownGood" mkdir "KnownGood"
-  copy /Y "build\Release\N3DLite.exe" "KnownGood\N3DLite.exe" >nul
-  if errorlevel 1 echo WARNING: Could not save KnownGood backup.
+ if not exist "KnownGood" mkdir "KnownGood"
+ copy /Y "build\Release\N3DLite.exe" "KnownGood\N3DLite.exe" >nul
 )
-rem Capture the actual build output so we only retry a known corrupt-library error.
-cmake --build build --config Release --parallel 2 > "N3DLite-build.log" 2>&1
-set "BUILD_RESULT=%ERRORLEVEL%"
+cmake --build build --config Release --parallel 2 >"N3DLite-build.log" 2>&1
+if not errorlevel 1 goto :built
 type "N3DLite-build.log"
-if "%BUILD_RESULT%"=="0" goto :build_ok
 findstr /C:"LNK1136" "N3DLite-build.log" >nul 2>&1
 if errorlevel 1 goto :failed
-echo.
-echo [Recovery] LNK1136 detected: rebuilding all generated libraries once...
-cmake --build build --config Release --clean-first --parallel 2 > "N3DLite-build-recovery.log" 2>&1
-set "RECOVERY_RESULT=%ERRORLEVEL%"
-type "N3DLite-build-recovery.log"
-if not "%RECOVERY_RESULT%"=="0" goto :failed
-:build_ok
-call :progress 95 Finalizing build...
-if not exist "build\Release\N3DLite.exe" goto :missing_exe
->"build\Release\N3DLite-built-revision.txt" echo %COREMODEL_REVISION%
-goto :launch
-
-:check_build_revision
-rem The helper runs in a fresh parse context so variables read above are expanded correctly.
-if "%COREM_MODEL_BUILT%"=="%COREMODEL_REVISION%" exit /b 0
-exit /b 1
-
+echo Retrying after LNK1136 with clean build...
+cmake --build build --config Release --clean-first --parallel 2 >"N3DLite-build-recovery.log" 2>&1
+if errorlevel 1 (
+ type "N3DLite-build-recovery.log"
+ goto :failed
+)
+:built
+call :progress 95 "Finalizing build..."
+if not exist "build\Release\N3DLite.exe" goto :failed
+>"build\Release\N3DLite-built-revision.txt" echo %N3D_REVISION%
 :launch
-call :progress 100 Launching N3DLite...
-call :close_splash
-echo.
-echo N3DLite is up to date; launching editor.
-echo Source revision:
-git rev-parse --short HEAD
+call :progress 100 "Launching N3DLite..."
+echo Starting N3DLite...
 start "" /D "%CD%" "%CD%\build\Release\N3DLite.exe"
 if errorlevel 1 goto :failed
+call :close_splash
 exit /b 0
 
+:check_revision
+if "%N3D_BUILT%"=="%N3D_REVISION%" exit /b 0
+exit /b 1
+
 :progress
-if not defined COREMODEL_SPLASH_PROGRESS exit /b 0
->"%COREMODEL_SPLASH_PROGRESS%" echo %~1^|%~2 %~3 %~4 %~5
+if not defined N3D_PROGRESS exit /b 0
+>"%N3D_PROGRESS%" echo %~1^|%~2
 exit /b 0
 
 :close_splash
-if defined COREMODEL_SPLASH_SIGNAL (
-  >"%COREMODEL_SPLASH_SIGNAL%" echo done
-)
+if defined N3D_SIGNAL >"%N3D_SIGNAL%" echo done
 exit /b 0
 
-:missing_root
-echo ERROR: Could not locate the CoreModel project folder.
-goto :failed
 :dirty
-echo ERROR: Local tracked source changes prevent GitHub update.
-echo No old editor will be launched.
+echo ERROR: Local tracked changes prevent automatic update.
 echo Run: git status --short
-echo Back up your changes before using git restore or git stash.
+echo Preserve your work before restoring any files.
 goto :failed
-:missing_git
-echo ERROR: git.exe was not found on PATH.
-goto :failed
-:missing_cmake
-echo ERROR: cmake.exe was not found on PATH.
-goto :failed
-:not_git
-echo ERROR: This folder is not the GitHub checkout.
-goto :failed
-:missing_exe
-echo ERROR: Build completed but N3DLite.exe was not found.
+
 :failed
 call :close_splash
 echo.
-echo N3DLite update/build failed. Nothing will be launched.
+echo ERROR: N3DLite update or launch failed.
+echo Check the output above. This window will stay open.
 pause
 exit /b 1
