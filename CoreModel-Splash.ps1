@@ -1,5 +1,5 @@
 # CoreModel updater splash. Runs in a separate STA PowerShell process.
-param([Parameter(Mandatory=$true)][string]$SignalFile)
+param([Parameter(Mandatory=$true)][string]$SignalFile, [Parameter(Mandatory=$true)][string]$ProgressFile)
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
@@ -24,26 +24,36 @@ $status.ForeColor = [System.Drawing.Color]::FromArgb(170,170,170)
 $status.Location = New-Object System.Drawing.Point(35,106)
 $status.Size = New-Object System.Drawing.Size(410,30)
 $form.Controls.Add($status)
-# Custom flat loading line: charcoal track and moving graphite segment.
-# This avoids the bright Windows-themed ProgressBar control.
+# One-way progress: fills left to right, never loops.
 $line = New-Object System.Windows.Forms.Panel
 $line.Location = New-Object System.Drawing.Point(35,154)
 $line.Size = New-Object System.Drawing.Size(410,5)
 $line.BackColor = [System.Drawing.Color]::FromArgb(53,53,53)
 $form.Controls.Add($line)
-$segment = New-Object System.Windows.Forms.Panel
-$segment.Location = New-Object System.Drawing.Point(0,0)
-$segment.Size = New-Object System.Drawing.Size(100,5)
-$segment.BackColor = [System.Drawing.Color]::FromArgb(105,105,105)
-$line.Controls.Add($segment)
-$progressX = -100
+$fill = New-Object System.Windows.Forms.Panel
+$fill.Location = New-Object System.Drawing.Point(0,0)
+$fill.Size = New-Object System.Drawing.Size(0,5)
+$fill.BackColor = [System.Drawing.Color]::FromArgb(105,105,105)
+$line.Controls.Add($fill)
+$script:progress = 0
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 30
+$timer.Interval = 120
 $timer.Add_Tick({
-  if(Test-Path -LiteralPath $SignalFile){$timer.Stop();$form.Close();return}
-  $script:progressX += 4
-  if($script:progressX -gt 410){$script:progressX = -100}
-  $segment.Left = $script:progressX
+  if(Test-Path -LiteralPath $ProgressFile){
+    try {
+      $parts = ([System.IO.File]::ReadAllText($ProgressFile)).Trim().Split('|',2)
+      $target = [int]$parts[0]
+      $script:progress = [Math]::Max($script:progress,[Math]::Min(100,[Math]::Max(0,$target)))
+      if($parts.Length -gt 1){$status.Text = $parts[1]}
+      $fill.Width = [int][Math]::Round(410*$script:progress/100)
+    } catch { }
+  }
+  if(Test-Path -LiteralPath $SignalFile){
+    $script:progress=100
+    $fill.Width=410
+    $timer.Stop()
+    $form.Close()
+  }
 })
 $form.Add_Shown({$timer.Start()})
 [System.Windows.Forms.Application]::Run($form)
