@@ -54,15 +54,55 @@ if exist "build\Release\CoreModel.exe" if exist "build\Release\CoreModel-built-r
   set /p COREM_MODEL_BUILT=<"build\Release\CoreModel-built-revision.txt"
   call :check_build_revision
   if not errorlevel 1 goto :launch
+)
+call :progress 50 Configuring build...
+echo [3/4] Configuring build...
+if exist "build\CMakeCache.txt" (
+  cmake -S . -B build
+) else (
+  cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+)
+if errorlevel 1 goto :failed
+
+call :progress 65 Building CoreModel...
+echo [4/4] Building CoreModel.exe...
+rem Preserve the last available executable before rebuilding; never overwrite this backup automatically.
+if exist "build\Release\CoreModel.exe" if not exist "KnownGood\CoreModel.exe" (
+  if not exist "KnownGood" mkdir "KnownGood"
+  copy /Y "build\Release\CoreModel.exe" "KnownGood\CoreModel.exe" >nul
+  if errorlevel 1 echo WARNING: Could not save KnownGood backup.
+)
+rem Capture the actual build output so we only retry a known corrupt-library error.
+cmake --build build --config Release --parallel 2 > "CoreModel-build.log" 2>&1
+set "BUILD_RESULT=%ERRORLEVEL%"
+type "CoreModel-build.log"
+if "%BUILD_RESULT%"=="0" goto :build_ok
+findstr /C:"LNK1136" "CoreModel-build.log" >nul 2>&1
+if errorlevel 1 goto :failed
+echo.
+echo [Recovery] LNK1136 detected: rebuilding all generated libraries once...
+cmake --build build --config Release --clean-first --parallel 2 > "CoreModel-build-recovery.log" 2>&1
+set "RECOVERY_RESULT=%ERRORLEVEL%"
+type "CoreModel-build-recovery.log"
+if not "%RECOVERY_RESULT%"=="0" goto :failed
+:build_ok
+call :progress 95 Finalizing build...
+if not exist "build\Release\CoreModel.exe" goto :missing_exe
+>"build\Release\CoreModel-built-revision.txt" echo %COREMODEL_REVISION%
+goto :launch
+
+:check_build_revision
+rem The helper runs in a fresh parse context so variables read above are expanded correctly.
+if "%COREM_MODEL_BUILT%"=="%COREMODEL_REVISION%" exit /b 0
+exit /b 1
+
+:launch
 call :progress 100 Launching CoreModel...
 call :close_splash
 echo.
 echo CoreModel is up to date; launching editor.
-echo Build successful. Launching CoreModel.exe directly.
 echo Source revision:
 git rev-parse --short HEAD
-for %%F in ("build\Release\CoreModel.exe") do echo Executable: %%~fF  ^(%%~zF bytes^)
-echo Previous executable backup: KnownGood\CoreModel.exe
 start "" /D "%CD%" "%CD%\build\Release\CoreModel.exe"
 if errorlevel 1 goto :failed
 exit /b 0
