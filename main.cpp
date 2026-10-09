@@ -592,6 +592,58 @@ int main(){SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);InitWindow(12
 rlImGuiSetup(true);
 ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 ImGui::StyleColorsDark();
+{
+ // Unified neutral dark-gray N3DLite editor palette.
+ ImGuiStyle& st=ImGui::GetStyle();
+ st.WindowRounding=3.0f;st.ChildRounding=3.0f;st.FrameRounding=3.0f;
+ st.PopupRounding=3.0f;st.GrabRounding=3.0f;st.TabRounding=3.0f;
+ st.WindowBorderSize=1.0f;st.FrameBorderSize=0.0f;
+ st.WindowPadding=ImVec2(10,9);st.FramePadding=ImVec2(8,5);
+ st.ItemSpacing=ImVec2(8,6);st.ScrollbarSize=12.0f;
+ auto& c=st.Colors;
+ c[ImGuiCol_Text]=ImVec4(.88f,.88f,.88f,1);
+ c[ImGuiCol_TextDisabled]=ImVec4(.53f,.53f,.53f,1);
+ c[ImGuiCol_WindowBg]=ImVec4(.15f,.15f,.15f,1);
+ c[ImGuiCol_ChildBg]=ImVec4(.16f,.16f,.16f,1);
+ c[ImGuiCol_PopupBg]=ImVec4(.18f,.18f,.18f,.98f);
+ c[ImGuiCol_Border]=ImVec4(.29f,.29f,.29f,.8f);
+ c[ImGuiCol_FrameBg]=ImVec4(.23f,.23f,.23f,1);
+ c[ImGuiCol_FrameBgHovered]=ImVec4(.31f,.31f,.31f,1);
+ c[ImGuiCol_FrameBgActive]=ImVec4(.36f,.36f,.36f,1);
+ c[ImGuiCol_TitleBg]=ImVec4(.12f,.12f,.12f,1);
+ c[ImGuiCol_TitleBgActive]=ImVec4(.20f,.20f,.20f,1);
+ c[ImGuiCol_MenuBarBg]=ImVec4(.17f,.17f,.17f,1);
+ c[ImGuiCol_ScrollbarBg]=ImVec4(.14f,.14f,.14f,1);
+ c[ImGuiCol_ScrollbarGrab]=ImVec4(.32f,.32f,.32f,1);
+ c[ImGuiCol_ScrollbarGrabHovered]=ImVec4(.42f,.42f,.42f,1);
+ c[ImGuiCol_ScrollbarGrabActive]=ImVec4(.51f,.51f,.51f,1);
+ c[ImGuiCol_CheckMark]=ImVec4(.75f,.75f,.75f,1);
+ c[ImGuiCol_SliderGrab]=ImVec4(.55f,.55f,.55f,1);
+ c[ImGuiCol_SliderGrabActive]=ImVec4(.72f,.72f,.72f,1);
+ c[ImGuiCol_Button]=ImVec4(.26f,.26f,.26f,1);
+ c[ImGuiCol_ButtonHovered]=ImVec4(.36f,.36f,.36f,1);
+ c[ImGuiCol_ButtonActive]=ImVec4(.44f,.44f,.44f,1);
+ c[ImGuiCol_Header]=ImVec4(.29f,.29f,.29f,1);
+ c[ImGuiCol_HeaderHovered]=ImVec4(.39f,.39f,.39f,1);
+ c[ImGuiCol_HeaderActive]=ImVec4(.45f,.45f,.45f,1);
+ c[ImGuiCol_Separator]=ImVec4(.31f,.31f,.31f,1);
+ c[ImGuiCol_SeparatorHovered]=ImVec4(.48f,.48f,.48f,1);
+ c[ImGuiCol_SeparatorActive]=ImVec4(.60f,.60f,.60f,1);
+ c[ImGuiCol_ResizeGrip]=ImVec4(.35f,.35f,.35f,.55f);
+ c[ImGuiCol_ResizeGripHovered]=ImVec4(.50f,.50f,.50f,.8f);
+ c[ImGuiCol_ResizeGripActive]=ImVec4(.65f,.65f,.65f,1);
+ c[ImGuiCol_Tab]=ImVec4(.19f,.19f,.19f,1);
+ c[ImGuiCol_TabHovered]=ImVec4(.35f,.35f,.35f,1);
+ c[ImGuiCol_TabSelected]=ImVec4(.28f,.28f,.28f,1);
+ c[ImGuiCol_DockingPreview]=ImVec4(.57f,.57f,.57f,.55f);
+ c[ImGuiCol_DockingEmptyBg]=ImVec4(.12f,.12f,.12f,1);
+ c[ImGuiCol_TableHeaderBg]=ImVec4(.22f,.22f,.22f,1);
+ c[ImGuiCol_TableBorderStrong]=ImVec4(.34f,.34f,.34f,1);
+ c[ImGuiCol_TableBorderLight]=ImVec4(.26f,.26f,.26f,1);
+ c[ImGuiCol_TableRowBg]=ImVec4(.17f,.17f,.17f,1);
+ c[ImGuiCol_TableRowBgAlt]=ImVec4(.20f,.20f,.20f,1);
+ c[ImGuiCol_NavHighlight]=ImVec4(.65f,.65f,.65f,.8f);
+}
 if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFontLoaded=uiFont.texture.id!=0;}
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
 int connectFeedback=0;
@@ -766,10 +818,10 @@ if(inView&&IsKeyPressed(KEY_KP_7)){camera.target={0,0,0};camera.position={0,0,10
 if(inView){float wheel=GetMouseWheelMove();if(wheel!=0){Vector3 dir=Vector3Normalize(Vector3Subtract(camera.target,camera.position));camera.position=Vector3Add(camera.position,Vector3Scale(dir,wheel*.5f));}}
 // Object or face manipulation: hold X/Y/Z while using arrow keys; one history snapshot per key press.
 int axis=IsKeyDown(KEY_X)?0:IsKeyDown(KEY_Y)?1:IsKeyDown(KEY_Z)?2:-1;float delta=(IsKeyPressed(KEY_UP)? .2f:0)+(IsKeyPressed(KEY_DOWN)?-.2f:0);if(selected>=0&&axis>=0&&delta!=0){checkpoint();auto&o=objects[selected];if(mode==3&&face>=0){for(int i:o.faces[face]){float *v=&o.vertices[i].x;v[axis]+=delta;}}else{float *v=&o.position.x;v[axis]+=delta;}}
-BeginDrawing();ClearBackground({18,21,26,255});BeginMode3D(camera);
+BeginDrawing();ClearBackground({37,37,37,255});BeginMode3D(camera);
 // Z-up editor: XY ground grid (raylib DrawGrid is XZ and was vertical here).
 for(int g=-20;g<=20;g++){
- Color c=(g==0)?Color{105,115,132,255}:((g%5==0)?Color{68,76,88,255}:Color{45,51,61,255});
+ Color c=(g==0)?Color{100,100,100,255}:((g%5==0)?Color{72,72,72,255}:Color{53,53,53,255});
  DrawLine3D({(float)g,-20,0},{(float)g,20,0},c);
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
