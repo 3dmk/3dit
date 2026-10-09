@@ -520,6 +520,7 @@ camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;
 int connectFeedback=0;
 bool showProperties=true;
 bool crosshairCursorHidden=false;
+bool openVertexContext=false;
 
 while(!WindowShouldClose()){
  if(connectFeedback>0)connectFeedback--;
@@ -581,8 +582,18 @@ if(rectanglePending&&IsMouseButtonReleased(MOUSE_BUTTON_LEFT)){
  rectanglePending=false;rectangleDragging=false;
 }
 if(drag.active){if(IsMouseButtonDown(MOUSE_BUTTON_LEFT))applyDrag();else drag.active=false;}
-if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)&&targetWeldArmed){targetWeldArmed=false;targetWeldSource=-1;targetWeldObject=-1;}
-if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)){
+if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
+ if(targetWeldArmed){targetWeldArmed=false;targetWeldSource=-1;targetWeldObject=-1;}
+ else if(mode==1&&validComponent()){
+  // Right-click a vertex to select it and expose its editing operations.
+  pickComponent(GetMousePosition());
+  if(sub>=0&&sub<(int)objects[selected].vertices.size()){
+   rectangleSelected.clear();rectangleObject=selected;
+   openVertexContext=true;
+  }
+ }
+}
+if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)&&!openVertexContext){
  Vector2 d=GetMouseDelta();Vector3 offset=Vector3Subtract(camera.position,camera.target);
  float radius=std::max(.5f,Vector3Length(offset));
  float yaw=atan2f(offset.y,offset.x)-d.x*.004f;
@@ -721,6 +732,18 @@ if(showCrosshair){
  DrawCircleV(cursor,1.5f,ink);
 }
 rlImGuiBegin();
+if(openVertexContext){
+ ImGui::OpenPopup("Vertex Context Menu");
+ openVertexContext=false;
+}
+if(ImGui::BeginPopup("Vertex Context Menu")){
+ const bool canEdit=mode==1&&validComponent()&&sub>=0&&sub<(int)objects[selected].vertices.size();
+ ImGui::BeginDisabled(!canEdit);
+ if(ImGui::MenuItem("Target Weld"))armTargetWeld();
+ if(ImGui::MenuItem("Chamfer"))chamferSelectedVertex();
+ ImGui::EndDisabled();
+ ImGui::EndPopup();
+}
 // Dockable tool windows, with a transparent central node for the raylib scene.
 ImGuiViewport* viewport=ImGui::GetMainViewport();
 // Reserve the toolbar height before docking, so docked panels align without overlap.
