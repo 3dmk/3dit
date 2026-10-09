@@ -832,7 +832,7 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({(float)g,-20,0},{(float)g,20,0},c);
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
-DrawLine3D({0,0,0},{2,0,0},RED);DrawLine3D({0,0,0},{0,2,0},GREEN);
+// Ground axes use the neutral grid palette; reserve RGB for transform gizmos.
 for(int oi=0;oi<(int)objects.size();oi++){auto&o=objects[oi];for(int fi=0;fi<(int)o.faces.size();fi++){auto&f=o.faces[fi];Color color=(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{215,45,50,255}:Color{135,135,135,255};for(size_t j=1;j+1<f.size();j++)DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),color);for(size_t j=0;j<f.size();j++)DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),(oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0)))?Color{255,92,92,255}:Color{78,82,88,255});}}
 // Draw the selected transform overlay only after all opaque object geometry.
 if(selected>=0&&selected<(int)objects.size()){
