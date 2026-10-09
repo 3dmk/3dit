@@ -595,7 +595,7 @@ while(!WindowShouldClose()){
 // WantCaptureMouse can remain true over the dock host and suppress all
 // Shift+click interactions. Use the actual viewport rectangle instead.
  const Vector2 pointer=GetMousePosition();
- const // Use the actual dockspace central viewport, not hard-coded side-panel
+ // Use the actual dockspace central viewport, not hard-coded side-panel
  // widths. A resized/docked panel must never limit extrusion to gizmo area.
  bool inView=pointer.x>=0.0f&&pointer.x<(float)w&&
              pointer.y>=44.0f&&pointer.y<(float)h&&
