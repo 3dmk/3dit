@@ -14,7 +14,7 @@
 #include <fstream>
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};};
 struct Snapshot {std::vector<MeshObject> objects;int selected,face,sub;};
-std::vector<MeshObject> objects;std::vector<Snapshot> undoStack,redoStack;int selected=-1,face=-1,mode=0,tool=1,sub=-1;Camera3D camera{};
+std::vector<MeshObject> objects;std::vector<Snapshot> undoStack,redoStack;int selected=-1,face=-1,mode=0,tool=1,sub=-1;Camera3D camera{};float gizmoSize=1.0f;
 void checkpoint(){undoStack.push_back({objects,selected,face,sub});if(undoStack.size()>80)undoStack.erase(undoStack.begin());redoStack.clear();}
 void undo(){if(undoStack.empty())return;redoStack.push_back({objects,selected,face,sub});auto s=undoStack.back();undoStack.pop_back();objects=s.objects;selected=s.selected;face=s.face;sub=s.sub;}
 void redo(){if(redoStack.empty())return;undoStack.push_back({objects,selected,face,sub});auto s=redoStack.back();redoStack.pop_back();objects=s.objects;selected=s.selected;face=s.face;sub=s.sub;}
@@ -455,13 +455,13 @@ int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode
    float ringDistance=1.0e9f;
    for(int j=0;j<64;j++){
     float t0=6.2831853f*j/64.0f,t1=6.2831853f*(j+1)/64.0f;
-    Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f));
-    Vector3 q1=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t1)),Vector3Scale(v,sinf(t1))),1.35f));
+    Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f*gizmoSize));
+    Vector3 q1=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t1)),Vector3Scale(v,sinf(t1))),1.35f*gizmoSize));
     ringDistance=std::min(ringDistance,segmentDistance(mouse,GetWorldToScreen(q0,camera),GetWorldToScreen(q1,camera)));
    }
    if(ringDistance<distance){distance=ringDistance;best=i;}
   }else{
-   Vector3 d{};(&d.x)[i]=1.35f;
+   Vector3 d{};(&d.x)[i]=1.35f*gizmoSize;
    Vector2 b=GetWorldToScreen(Vector3Add(p,d),camera);
    float x=segmentDistance(mouse,a,b);
    // End-cap picking allows selecting arrows and scale cubes outside the mesh silhouette.
@@ -493,10 +493,10 @@ void startDrag(int axis){if(selected<0)return;checkpoint();auto& o=objects[selec
  drag={};drag.active=true;drag.axis=axis;drag.start=GetMousePosition();drag.startPos=o.position;
  drag.center=pivot(o);drag.startVertices=o.vertices;drag.affected=active(o);}
 void applyDrag(){if(!drag.active||selected<0)return;auto& o=objects[selected];
- Vector3 axis{};(&axis.x)[drag.axis]=1.35f;
+ Vector3 axis{};(&axis.x)[drag.axis]=1.35f*gizmoSize;
  Vector2 a=GetWorldToScreen(drag.center,camera),b=GetWorldToScreen(Vector3Add(drag.center,axis),camera);
  Vector2 direction=Vector2Subtract(b,a),delta=Vector2Subtract(GetMousePosition(),drag.start);
- float amount=Vector2DotProduct(delta,direction)/std::max(1.0f,Vector2DotProduct(direction,direction))*1.35f;
+ float amount=Vector2DotProduct(delta,direction)/std::max(1.0f,Vector2DotProduct(direction,direction))*1.35f*gizmoSize;
  if(mode==0){
   o.position=drag.startPos;
   o.vertices=drag.startVertices;
@@ -727,6 +727,11 @@ while(!WindowShouldClose()){
   if(IsKeyPressed(KEY_W)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=1;
   if(IsKeyPressed(KEY_E)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=2;
   if(IsKeyPressed(KEY_R)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=3;
+  // +/- change only the visible gizmo size, never the object geometry.
+  if(IsKeyPressed(KEY_EQUAL)||IsKeyPressed(KEY_KP_ADD))
+   gizmoSize=std::min(4.0f,gizmoSize*1.15f);
+  if(IsKeyPressed(KEY_MINUS)||IsKeyPressed(KEY_KP_SUBTRACT))
+   gizmoSize=std::max(0.25f,gizmoSize/1.15f);
  }
  // Selection indices refer to different component tables in each mode.
  // Never carry vertex/edge/face selection sets across a mode change.
@@ -765,7 +770,7 @@ while(!WindowShouldClose()){
    // over the thin axis shaft. Rotation rings are direct gizmo targets.
    int axis=handleHit(m);
    if(axis>=0&&mode!=0&&tool!=2){
-    Vector3 handleDirection{};(&handleDirection.x)[axis]=1.6f;
+    Vector3 handleDirection{};(&handleDirection.x)[axis]=1.6f*gizmoSize;
     const Vector2 endpoint=GetWorldToScreen(Vector3Add(pivot(objects[selected]),handleDirection),camera);
     const bool onHandle=Vector2Distance(m,endpoint)<=20.0f;
     if(!onHandle){
@@ -892,8 +897,8 @@ if(selected>=0&&selected<(int)objects.size()){
    // Z-up: X/Y rings are vertical; the Z ring is horizontal.
    for(int j=0;j<64;j++){
     float t0=6.2831853f*j/64.0f,t1=6.2831853f*(j+1)/64.0f;
-    Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f));
-    Vector3 q1=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t1)),Vector3Scale(v,sinf(t1))),1.35f));
+    Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f*gizmoSize));
+    Vector3 q1=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t1)),Vector3Scale(v,sinf(t1))),1.35f*gizmoSize));
     DrawLine3D(q0,q1,colors[axis]);
    }
   }
@@ -901,14 +906,14 @@ if(selected>=0&&selected<(int)objects.size()){
   const Vector3 directions[3]={{1,0,0},{0,1,0},{0,0,1}};
   const Color colors[3]={RED,GREEN,BLUE};
   for(int axis=0;axis<3;axis++){
-   Vector3 tip=Vector3Add(p,Vector3Scale(directions[axis],1.6f));
+   Vector3 tip=Vector3Add(p,Vector3Scale(directions[axis],1.6f*gizmoSize));
    DrawLine3D(p,tip,colors[axis]);
    if(tool==1){
     // Move: arrowhead, not a scale cube.
-    DrawCylinderEx(Vector3Add(p,Vector3Scale(directions[axis],1.32f)),tip,.115f,0.0f,10,colors[axis]);
+    DrawCylinderEx(Vector3Add(p,Vector3Scale(directions[axis],1.32f*gizmoSize)),tip,.115f*gizmoSize,0.0f,10,colors[axis]);
    }else{
     // Scale: box handle at each axis endpoint.
-    DrawCube(tip,.22f,.22f,.22f,colors[axis]);
+    DrawCube(tip,.22f*gizmoSize,.22f*gizmoSize,.22f*gizmoSize,colors[axis]);
    }
   }
  }
@@ -1074,6 +1079,8 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  if(TransformIconButton("TopScale",3,tool==3))tool=3;
  ImGui::SameLine(0,12);
  ImGui::TextDisabled("Gizmo: %s | X / Y / Z",tool==1?"Move":tool==2?"Rotate":tool==3?"Scale":"None");
+ ImGui::SameLine(0,8);
+ ImGui::TextDisabled("Size: %.0f%% (+/-)",gizmoSize*100.0f);
  ImGui::SameLine(0,12);
  if(selected>=0&&selected<(int)objects.size()){
   const Vector3 coords=pivot(objects[selected]);
