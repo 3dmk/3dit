@@ -1210,7 +1210,8 @@ for(int oi=0;oi<(int)objects.size();oi++){
   }
  }
  if(entry.uploaded){
-  Material material=LoadMaterialDefault();
+  static Material viewportMaterial=LoadMaterialDefault();
+  Material material=viewportMaterial;
   if(smoothShaderReady){
    const auto& mat=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
    material.shader=smoothShader;
@@ -1222,7 +1223,7 @@ for(int oi=0;oi<(int)objects.size();oi++){
    SetShaderValue(smoothShader,locCamera,cameraXYZ,SHADER_UNIFORM_VEC3);
   }
   DrawMesh(entry.mesh,material,MatrixTranslate(o.position.x,o.position.y,o.position.z));
-  // The default material owns shared default textures; do not unload it per frame.
+  // Reuse the default material resources; never allocate them per draw call.
  }
  // Keep sub-object selection and topology edges as an independent overlay.
  for(int fi=0;fi<(int)o.faces.size();fi++){
