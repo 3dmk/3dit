@@ -93,6 +93,19 @@ void main(){
 )GLSL";
 struct Snapshot {std::vector<MeshObject> objects;int selected,face,sub;};
 std::vector<MeshObject> objects;std::vector<Snapshot> undoStack,redoStack;int selected=-1,face=-1,mode=0,tool=1,sub=-1;Camera3D camera{};float gizmoSize=1.0f;
+struct GpuEntry{
+ std::vector<Vector3> vertices;
+ std::vector<std::vector<int>> faces;
+ int group=-1;
+ float strength=-1.0f;
+ Mesh mesh{};
+ bool uploaded=false;
+};
+static std::vector<GpuEntry> gpuCache;
+auto disposeGpu=[](GpuEntry& e){
+ if(e.mesh.vertices||e.mesh.normals||e.mesh.vaoId||e.mesh.vboId){UnloadMesh(e.mesh);e.mesh={};e.uploaded=false;}
+};
+
 void checkpoint(){undoStack.push_back({objects,selected,face,sub});if(undoStack.size()>80)undoStack.erase(undoStack.begin());redoStack.clear();}
 void undo(){if(undoStack.empty())return;redoStack.push_back({objects,selected,face,sub});auto s=undoStack.back();undoStack.pop_back();objects=s.objects;selected=s.selected;face=s.face;sub=s.sub;}
 void redo(){if(redoStack.empty())return;undoStack.push_back({objects,selected,face,sub});auto s=redoStack.back();redoStack.pop_back();objects=s.objects;selected=s.selected;face=s.face;sub=s.sub;}
@@ -1137,18 +1150,6 @@ for(int g=-20;g<=20;g++){
 // Ground axes use the neutral grid palette; reserve RGB for transform gizmos.
 // Persistent GPU triangle buffers. Geometry is uploaded only when mesh topology,
 // vertex coordinates, or smoothing strength changes; camera movement never uploads.
-struct GpuEntry{
- std::vector<Vector3> vertices;
- std::vector<std::vector<int>> faces;
- int group=-1;
- float strength=-1.0f;
- Mesh mesh{};
- bool uploaded=false;
-};
-static std::vector<GpuEntry> gpuCache;
-auto disposeGpu=[](GpuEntry& e){
- if(e.mesh.vertices||e.mesh.normals||e.mesh.vaoId||e.mesh.vboId){UnloadMesh(e.mesh);e.mesh={};e.uploaded=false;}
-};
 if(gpuCache.size()!=objects.size()){
  for(auto& e:gpuCache)disposeGpu(e);
  gpuCache.clear();
