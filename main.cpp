@@ -624,12 +624,13 @@ float segmentDistance(Vector2 p,Vector2 a,Vector2 b){Vector2 d=Vector2Subtract(b
  float t=std::clamp(Vector2DotProduct(v,d)/std::max(1.0f,Vector2DotProduct(d,d)),0.0f,1.0f);
  return Vector2Distance(p,Vector2Add(a,Vector2Scale(d,t)));}
 // Move plane handles: XY=3, XZ=4, YZ=5.
+// Compact corner square, inset from both axes. Hit-testing uses its true center.
 Vector3 planeHandlePoint(Vector3 center,int handle,float size){
  Vector3 offset{};
  const int a=handle==3?0:handle==4?0:1;
  const int b=handle==3?1:2;
- (&offset.x)[a]=size*0.38f;
- (&offset.x)[b]=size*0.52f;
+ (&offset.x)[a]=size*0.39f;
+ (&offset.x)[b]=size*0.39f;
  return Vector3Add(center,offset);
 }
 int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode!=0&&active(objects[selected]).empty()))return -1;Vector3 p=pivot(objects[selected]);
@@ -1340,13 +1341,20 @@ if(selected>=0&&selected<(int)objects.size()){
    for(int h=3;h<=5;h++){
     const int a=h==3?0:h==4?0:1,b=h==3?1:2;
     Vector3 u{},v{};(&u.x)[a]=1;(&v.x)[b]=1;
-    Vector3 corner=Vector3Add(p,Vector3Scale(Vector3Add(u,v),0.55f*gizmoSize));
-    Vector3 edgeA=Vector3Add(p,Vector3Scale(u,0.75f*gizmoSize));
-    Vector3 edgeB=Vector3Add(p,Vector3Scale(v,0.75f*gizmoSize));
-    DrawTriangle3D(p,edgeA,corner,planeColors[h-3]);
-    DrawTriangle3D(p,corner,edgeB,planeColors[h-3]);
-    DrawLine3D(edgeA,corner,planeColors[h-3]);
-    DrawLine3D(corner,edgeB,planeColors[h-3]);
+    // Square occupies 0.29..0.49 of each axis, not the entire pivot-to-axis wedge.
+    const float inner=0.29f*gizmoSize,outer=0.49f*gizmoSize;
+    Vector3 q00=Vector3Add(p,Vector3Add(Vector3Scale(u,inner),Vector3Scale(v,inner)));
+    Vector3 q10=Vector3Add(p,Vector3Add(Vector3Scale(u,outer),Vector3Scale(v,inner)));
+    Vector3 q11=Vector3Add(p,Vector3Add(Vector3Scale(u,outer),Vector3Scale(v,outer)));
+    Vector3 q01=Vector3Add(p,Vector3Add(Vector3Scale(u,inner),Vector3Scale(v,outer)));
+    DrawTriangle3D(q00,q10,q11,planeColors[h-3]);
+    DrawTriangle3D(q00,q11,q01,planeColors[h-3]);
+    DrawTriangle3D(q11,q10,q00,planeColors[h-3]);
+    DrawTriangle3D(q01,q11,q00,planeColors[h-3]);
+    DrawLine3D(q00,q10,planeColors[h-3]);
+    DrawLine3D(q10,q11,planeColors[h-3]);
+    DrawLine3D(q11,q01,planeColors[h-3]);
+    DrawLine3D(q01,q00,planeColors[h-3]);
    }
   }
   for(int axis=0;axis<3;axis++){
