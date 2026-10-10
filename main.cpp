@@ -1147,7 +1147,7 @@ struct GpuEntry{
 };
 static std::vector<GpuEntry> gpuCache;
 auto disposeGpu=[](GpuEntry& e){
- if(e.mesh.vertices||e.mesh.normals||e.mesh.vaoId){UnloadMesh(e.mesh);e.mesh={};e.uploaded=false;}
+ if(e.mesh.vertices||e.mesh.normals||e.mesh.vaoId||e.mesh.vboId){UnloadMesh(e.mesh);e.mesh={};e.uploaded=false;}
 };
 if(gpuCache.size()!=objects.size()){
  for(auto& e:gpuCache)disposeGpu(e);
@@ -1173,7 +1173,7 @@ for(int oi=0;oi<(int)objects.size();oi++){
   // This avoids destroying/recreating VAOs and VBOs during vertex drags.
   size_t requiredTriangles=0;
   for(const auto& f:o.faces)if(f.size()>=3)requiredTriangles+=f.size()-2;
-  const bool reuseBuffers=entry.uploaded&&requiredTriangles>0&&entry.mesh.triangleCount==(int)requiredTriangles&&
+  const bool reuseBuffers=entry.uploaded&&requiredTriangles>0&&requiredTriangles<=(size_t)(INT_MAX/3)&&entry.mesh.triangleCount==(int)requiredTriangles&&
                           entry.mesh.vertices&&entry.mesh.normals;
   if(!reuseBuffers)disposeGpu(entry);
   entry.vertices=o.vertices;entry.faces=o.faces;
@@ -1189,7 +1189,7 @@ for(int oi=0;oi<(int)objects.size();oi++){
   for(auto& n:averaged)if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
   size_t triangleCount=0;
   for(const auto& f:o.faces)if(f.size()>=3)triangleCount+=f.size()-2;
-  if(triangleCount>0&&triangleCount<=static_cast<size_t>(INT_MAX/3)){
+  if(triangleCount>0&&triangleCount<=static_cast<size_t>(INT_MAX/3)&&triangleCount<=static_cast<size_t>(INT_MAX/(9*sizeof(float)))){
    if(!reuseBuffers){
     entry.mesh.vertexCount=(int)(triangleCount*3);
     entry.mesh.triangleCount=(int)triangleCount;
@@ -1226,6 +1226,8 @@ for(int oi=0;oi<(int)objects.size();oi++){
  if(entry.uploaded){
   static Material viewportMaterial=LoadMaterialDefault();
   Material material=viewportMaterial;
+  // Use the same view-dependent material shader for flat and smooth objects.
+  // Flat objects already carry face normals in their uploaded triangle buffer.
   if(smoothShaderReady){
    const auto& mat=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
    material.shader=smoothShader;
