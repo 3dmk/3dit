@@ -844,6 +844,8 @@ int main(){
  ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
  ImGui::GetIO().IniFilename="N3DLite-layout.ini";
  ImGui::LoadIniSettingsFromDisk("N3DLite-layout.ini");
+ // Material editor starts closed on every launch, regardless of saved docking state.
+ bool materialsPanelOpen=false;
  auto saveWindowLayout=[](){
   if(IsWindowMinimized()||IsWindowFullscreen())return;
   const Vector2 pos=GetWindowPosition();
@@ -1583,7 +1585,10 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
   ImGui::TextDisabled("X: --  Y: --  Z: --");
  }
  ImGui::SameLine(0,18);
- if(ImGui::Button("Materials")){ImGui::SetWindowFocus("Materials");ImGui::SetWindowCollapsed("Materials",false);}
+ if(ImGui::Button("Materials")){
+  materialsPanelOpen=!materialsPanelOpen;
+  if(materialsPanelOpen)ImGui::SetWindowFocus("Materials");
+ }
  ImGui::SameLine(0,8);
  if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
  if(connectFeedback>0){ImGui::SameLine();ImGui::TextUnformatted("Copied");}
@@ -1715,8 +1720,9 @@ if(ImGui::Begin("Smoothing Groups")){
  }else ImGui::TextDisabled("Select an object to edit smoothing");
 }
 ImGui::End();
+if(materialsPanelOpen){
 ImGui::SetNextWindowSize(ImVec2(350,430),ImGuiCond_FirstUseEver);
-if(ImGui::Begin("Materials")){
+if(ImGui::Begin("Materials",&materialsPanelOpen)){
  if(ImGui::Button("New Material")){
   EditorMaterial m; m.name="Material "+std::to_string(materials.size());
   materials.push_back(m);activeMaterial=(int)materials.size()-1;
@@ -1751,6 +1757,7 @@ if(ImGui::Begin("Materials")){
  }
 }
 ImGui::End();
+}
 // Record only real UI panels, not the pass-through dockspace. This
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
