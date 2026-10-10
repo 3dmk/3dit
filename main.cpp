@@ -1550,7 +1550,6 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
  ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
- ImGui::DockBuilderDockWindow("Materials",bottomLeft);
  ImGui::DockBuilderDockWindow("Smoothing Groups",bottomLeft);
  ImGui::DockBuilderFinish(dockId);
 }
@@ -1584,6 +1583,8 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
   ImGui::TextDisabled("X: --  Y: --  Z: --");
  }
  ImGui::SameLine(0,18);
+ if(ImGui::Button("Materials")){ImGui::SetWindowFocus("Materials");ImGui::SetWindowCollapsed("Materials",false);}
+ ImGui::SameLine(0,8);
  if(ImGui::Button("Copy AI Connect")){SetClipboardText(connectionPrompt);connectFeedback=180;}
  if(connectFeedback>0){ImGui::SameLine();ImGui::TextUnformatted("Copied");}
 }
@@ -1714,6 +1715,7 @@ if(ImGui::Begin("Smoothing Groups")){
  }else ImGui::TextDisabled("Select an object to edit smoothing");
 }
 ImGui::End();
+ImGui::SetNextWindowSize(ImVec2(350,430),ImGuiCond_FirstUseEver);
 if(ImGui::Begin("Materials")){
  if(ImGui::Button("New Material")){
   EditorMaterial m; m.name="Material "+std::to_string(materials.size());
