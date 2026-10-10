@@ -53,6 +53,28 @@ Color shadeMaterialTriangle(const MeshObject& o,Vector3 a,Vector3 b,Vector3 c,Ve
  }
  return {channel[0],channel[1],channel[2],255};
 }
+static const char* smoothVS=R"GLSL(#version 330
+in vec3 vertexPosition;
+in vec3 vertexNormal;
+uniform mat4 mvp;
+out vec3 nrm;
+void main(){nrm=vertexNormal;gl_Position=mvp*vec4(vertexPosition,1.0);})GLSL";
+static const char* smoothFS=R"GLSL(#version 330
+in vec3 nrm;
+out vec4 finalColor;
+uniform vec3 baseColor;
+uniform float roughness;
+uniform float metallic;
+uniform float specular;
+void main(){
+ vec3 n=normalize(nrm),light=normalize(vec3(0.35,-0.55,0.75));
+ if(!gl_FrontFacing)n=-n;
+ float d=max(dot(n,light),0.0);
+ vec3 v=vec3(0.0,0.0,1.0);
+ float shine=pow(max(dot(n,normalize(light+v)),0.0),2.0+126.0*pow(1.0-clamp(roughness,0.02,1.0),2.0));
+ float metal=clamp(metallic,0.0,1.0);
+ finalColor=vec4(clamp(baseColor*(0.22+0.78*d)*(1.0-0.78*metal)+shine*(0.06+0.9*specular)*mix(vec3(1.0),baseColor,metal),0.0,1.0),1.0);
+})GLSL";
 struct Snapshot {std::vector<MeshObject> objects;int selected,face,sub;};
 std::vector<MeshObject> objects;std::vector<Snapshot> undoStack,redoStack;int selected=-1,face=-1,mode=0,tool=1,sub=-1;Camera3D camera{};float gizmoSize=1.0f;
 void checkpoint(){undoStack.push_back({objects,selected,face,sub});if(undoStack.size()>80)undoStack.erase(undoStack.begin());redoStack.clear();}
@@ -720,6 +742,12 @@ int main(){
  ApplyN3DLiteTitlebarTheme();
  if(hasSavedWindow)SetWindowPosition(savedX,savedY);
  SetTargetFPS(60);
+ Shader smoothShader=LoadShaderFromMemory(smoothVS,smoothFS);
+ const bool smoothShaderReady=smoothShader.id!=0;
+ const int locBase=GetShaderLocation(smoothShader,"baseColor");
+ const int locRough=GetShaderLocation(smoothShader,"roughness");
+ const int locMetal=GetShaderLocation(smoothShader,"metallic");
+ const int locSpec=GetShaderLocation(smoothShader,"specular");
  rlImGuiSetup(true);
  ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
  ImGui::GetIO().IniFilename="N3DLite-layout.ini";
@@ -1109,6 +1137,15 @@ for(int oi=0;oi<(int)objects.size();oi++){
   }
   for(auto& n:smooth)if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
  }
+ const bool pixel=smoothShaderReady&&o.smoothingGroup>0&&o.smoothingValues[o.smoothingGroup]>0;
+ if(pixel){
+  const EditorMaterial& mat=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
+  SetShaderValue(smoothShader,locBase,mat.baseColor,SHADER_UNIFORM_VEC3);
+  SetShaderValue(smoothShader,locRough,&mat.roughness,SHADER_UNIFORM_FLOAT);
+  SetShaderValue(smoothShader,locMetal,&mat.metallic,SHADER_UNIFORM_FLOAT);
+  SetShaderValue(smoothShader,locSpec,&mat.specular,SHADER_UNIFORM_FLOAT);
+  BeginShaderMode(smoothShader);
+ }
  for(int fi=0;fi<(int)o.faces.size();fi++){
   const auto& f=o.faces[fi];
   if(f.size()<3)continue;
@@ -1127,16 +1164,19 @@ for(int oi=0;oi<(int)objects.size();oi++){
      if(Vector3Length(flat)>1e-7f)flat=Vector3Normalize(flat);
      const float weight=std::clamp(o.smoothingValues[o.smoothingGroup]/100.0f,0.0f,1.0f);
      Vector3 blended=Vector3Add(Vector3Scale(flat,1.0f-weight),Vector3Scale(smooth[ids[k]],weight));
-     Color color=shadeMaterialTriangle(o,p[k],p[(k+1)%3],p[(k+2)%3],camera.position,blended);
-     rlColor4ub(color.r,color.g,color.b,color.a);
+     if(pixel){rlColor4ub(255,255,255,255);rlNormal3f(blended.x,blended.y,blended.z);}
+     else {Color color=shadeMaterialTriangle(o,p[k],p[(k+1)%3],p[(k+2)%3],camera.position,blended);rlColor4ub(color.r,color.g,color.b,color.a);}
      rlVertex3f(p[k].x,p[k].y,p[k].z);
     }
     rlEnd();
    }
   }
+  if(pixel)EndShaderMode();
   for(size_t j=0;j<f.size();j++)
    DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:Color{78,82,88,255});
+  if(pixel)BeginShaderMode(smoothShader);
  }
+ if(pixel)EndShaderMode();
 }
 rlDrawRenderBatchActive();
 rlDisableBackfaceCulling();
