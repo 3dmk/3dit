@@ -1720,106 +1720,145 @@ if(ImGui::Begin("Smoothing Groups")){
  }else ImGui::TextDisabled("Select an object to edit smoothing");
 }
 ImGui::End();
-// Node graph editor: blank until the user creates a PBR shader.
-// Graph is editor-owned; legacy viewport material stays intact until compilation is implemented.
+// Freeform PBR graph workspace. Connections belong to individual named input sockets.
 if(materialsPanelOpen){
- ImGui::SetNextWindowSize(ImVec2(800,540),ImGuiCond_FirstUseEver);
+ ImGui::SetNextWindowSize(ImVec2(900,600),ImGuiCond_FirstUseEver);
  if(ImGui::Begin("Materials",&materialsPanelOpen)){
-  struct ShaderNode {int id;int type;ImVec2 pos;float value;float color[3];int input=-1;};
+  struct ShaderNode {int id;int type;ImVec2 pos;float value=0.5f;float color[3]={0.8f,0.8f,0.8f};};
+  struct ShaderLink {int from;int to;int socket;};
   static std::vector<ShaderNode> nodes;
-  static int nextId=1,linkFrom=-1;
+  static std::vector<ShaderLink> links;
+  static int nextId=1,connecting=-1;
   static bool hasPbr=false;
-  const char* nodeTypes[]={"PBR_Shader","Image Texture","Color","Value","Noise","Normal Map","Mix","Math"};
+  static ImVec2 pan(0,0);
+  static float zoom=1.0f;
+  const char* nodeTypes[]={"PBR_Shader","Image Texture","Color","Value","Noise","Normal Map","Mix","Math","UV Map","Multiply","Add","Fresnel","Emission","AO","Separate RGB","Combine RGB"};
+  auto sockets=[&](int type)->std::vector<const char*>{
+   switch(type){
+    case 0:return {"Base Color","Metallic","Roughness","Normal","AO","Emission","Opacity","IOR","Transmission","Clearcoat"};
+    case 5:return {"Color","Strength"};
+    case 6:return {"A","B","Factor"};
+    case 7:case 9:case 10:return {"A","B"};
+    case 1:return {"UV"};
+    case 4:return {"Scale","Detail"};
+    case 11:return {"IOR","Normal"};
+    case 12:return {"Color","Strength"};
+    case 14:return {"Color"};
+    case 15:return {"R","G","B"};
+    default:return {};
+   }
+  };
   if(!hasPbr){
    if(ImGui::Button("Add PBR_Shader",ImVec2(-1,38))){
-    hasPbr=true;
-    nodes.push_back({nextId++,0,ImVec2(410,125),0.5f,{0.8f,0.8f,0.8f},-1});
+    hasPbr=true;nodes.push_back({nextId++,0,ImVec2(390,80)});
    }
-   ImGui::TextDisabled("Create a PBR shader to start the material graph.");
+   ImGui::TextDisabled("Empty graph. Add a PBR_Shader to begin.");
   }else{
    if(ImGui::Button("Assign to Selected")&&selected>=0&&selected<(int)objects.size()){
     checkpoint();objects[selected].materialId=activeMaterial;
    }
    ImGui::SameLine();
+   if(ImGui::Button("Reset View")){pan=ImVec2(0,0);zoom=1.0f;}
+   ImGui::SameLine();
    if(ImGui::Button("Clear Graph"))ImGui::OpenPopup("Clear Shader Graph?");
    if(ImGui::BeginPopupModal("Clear Shader Graph?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
-    ImGui::TextUnformatted("Remove the PBR shader and all nodes?");
-    if(ImGui::Button("Remove")){nodes.clear();hasPbr=false;linkFrom=-1;ImGui::CloseCurrentPopup();}
+    ImGui::TextUnformatted("Delete all shader nodes and connections?");
+    if(ImGui::Button("Delete")){nodes.clear();links.clear();hasPbr=false;connecting=-1;ImGui::CloseCurrentPopup();}
     ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
    }
-   ImGui::TextDisabled("Right-click canvas to add nodes. Drag an output socket to an input socket.");
-   const ImVec2 origin=ImGui::GetCursorScreenPos();
-   ImVec2 size=ImGui::GetContentRegionAvail();size.x=std::max(200.0f,size.x);size.y=std::max(180.0f,size.y);
-   ImGui::InvisibleButton("##ShaderCanvas",size,ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight);
+   ImGui::TextDisabled("Right-click empty canvas: add node | drag header: move | middle-drag: pan | wheel: zoom | click sockets: connect | right-click input: unlink");
+   ImVec2 origin=ImGui::GetCursorScreenPos();
+   ImVec2 area=ImGui::GetContentRegionAvail();area.x=std::max(250.0f,area.x);area.y=std::max(200.0f,area.y-22);
+   ImGui::InvisibleButton("##ShaderCanvas",area,ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight|ImGuiButtonFlags_MouseButtonMiddle);
+   bool canvasHover=ImGui::IsItemHovered();
+   if(canvasHover&&ImGui::IsMouseDragging(ImGuiMouseButton_Middle)){
+    pan.x+=ImGui::GetIO().MouseDelta.x;pan.y+=ImGui::GetIO().MouseDelta.y;
+   }
+   if(canvasHover&&ImGui::GetIO().MouseWheel!=0){
+    float old=zoom;zoom=std::clamp(zoom*(ImGui::GetIO().MouseWheel>0?1.1f:1.0f/1.1f),0.45f,2.0f);
+    ImVec2 m=ImGui::GetMousePos();
+    pan.x=(m.x-origin.x)-(m.x-origin.x-pan.x)*zoom/old;
+    pan.y=(m.y-origin.y)-(m.y-origin.y-pan.y)*zoom/old;
+   }
    ImDrawList* draw=ImGui::GetWindowDrawList();
-   draw->AddRectFilled(origin,ImVec2(origin.x+size.x,origin.y+size.y),IM_COL32(28,30,34,255));
-   draw->PushClipRect(origin,ImVec2(origin.x+size.x,origin.y+size.y),true);
-   for(float x=0;x<size.x;x+=24)draw->AddLine(ImVec2(origin.x+x,origin.y),ImVec2(origin.x+x,origin.y+size.y),IM_COL32(48,49,53,130));
-   for(float y=0;y<size.y;y+=24)draw->AddLine(ImVec2(origin.x,origin.y+y),ImVec2(origin.x+size.x,origin.y+y),IM_COL32(48,49,53,130));
-   if(ImGui::IsItemHovered()&&ImGui::IsMouseClicked(ImGuiMouseButton_Right))ImGui::OpenPopup("Add Shader Node");
+   ImVec2 end(origin.x+area.x,origin.y+area.y);
+   draw->AddRectFilled(origin,end,IM_COL32(27,29,33,255));
+   draw->PushClipRect(origin,end,true);
+   float grid=32.0f*zoom;
+   for(float x=std::fmod(pan.x,grid);x<area.x;x+=grid)draw->AddLine(ImVec2(origin.x+x,origin.y),ImVec2(origin.x+x,end.y),IM_COL32(56,59,65,110));
+   for(float y=std::fmod(pan.y,grid);y<area.y;y+=grid)draw->AddLine(ImVec2(origin.x,origin.y+y),ImVec2(end.x,origin.y+y),IM_COL32(56,59,65,110));
+   auto screen=[&](ImVec2 p){return ImVec2(origin.x+pan.x+p.x*zoom,origin.y+pan.y+p.y*zoom);};
+   auto findNode=[&](int id)->ShaderNode*{for(auto& n:nodes)if(n.id==id)return &n;return nullptr;};
+   if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right))ImGui::OpenPopup("Add Shader Node");
    if(ImGui::BeginPopup("Add Shader Node")){
-    for(int type=1;type<8;type++)if(ImGui::MenuItem(nodeTypes[type])){
-     ImVec2 p=ImGui::GetMousePosOnOpeningCurrentPopup();
-     nodes.push_back({nextId++,type,ImVec2(std::max(0.0f,p.x-origin.x),std::max(0.0f,p.y-origin.y)),0.5f,{0.8f,0.8f,0.8f},-1});
+    ImVec2 mouse=ImGui::GetMousePosOnOpeningCurrentPopup();
+    for(int type=1;type<16;type++)if(ImGui::MenuItem(nodeTypes[type])){
+     nodes.push_back({nextId++,type,ImVec2((mouse.x-origin.x-pan.x)/zoom,(mouse.y-origin.y-pan.y)/zoom)});
     }
     ImGui::EndPopup();
    }
-   auto findNode=[&](int id)->ShaderNode*{for(auto& n:nodes)if(n.id==id)return &n;return nullptr;};
-   for(auto& n:nodes)if(n.input>=0){
-    ShaderNode* source=findNode(n.input);
-    if(source){
-     ImVec2 p1(origin.x+source->pos.x+155,origin.y+source->pos.y+35);
-     ImVec2 p2(origin.x+n.pos.x,origin.y+n.pos.y+35);
-     draw->AddBezierCubic(p1,ImVec2(p1.x+65,p1.y),ImVec2(p2.x-65,p2.y),p2,IM_COL32(242,179,76,255),2.5f);
-    }
+   auto socketPos=[&](ShaderNode& n,int socket){return screen(ImVec2(n.pos.x,n.pos.y+39.0f+socket*22.0f));};
+   for(const auto& link:links){
+    ShaderNode* from=findNode(link.from);ShaderNode* to=findNode(link.to);
+    if(!from||!to||link.socket<0||link.socket>=(int)sockets(to->type).size())continue;
+    ImVec2 p1=screen(ImVec2(from->pos.x+175,from->pos.y+39));
+    ImVec2 p2=socketPos(*to,link.socket);
+    draw->AddBezierCubic(p1,ImVec2(p1.x+65*zoom,p1.y),ImVec2(p2.x-65*zoom,p2.y),p2,IM_COL32(232,169,73,255),2.3f);
    }
    for(auto& n:nodes){
     ImGui::PushID(n.id);
-    const ImVec2 p(origin.x+n.pos.x,origin.y+n.pos.y);
-    const ImVec2 q(p.x+155,p.y+90);
-    draw->AddRectFilled(p,q,IM_COL32(49,51,58,255),5);
-    draw->AddRectFilled(p,ImVec2(q.x,p.y+24),n.type==0?IM_COL32(145,95,44,255):IM_COL32(65,95,125,255),5);
-    draw->AddText(ImVec2(p.x+9,p.y+5),IM_COL32(255,255,255,255),nodeTypes[n.type]);
-    draw->AddCircleFilled(ImVec2(p.x,p.y+35),5,IM_COL32(235,170,80,255));
-    if(n.type!=0)draw->AddCircleFilled(ImVec2(q.x,p.y+35),5,IM_COL32(235,170,80,255));
-    ImGui::SetCursorScreenPos(ImVec2(p.x+6,p.y+4));
-    ImGui::InvisibleButton("move",ImVec2(143,19));
+    const auto inputs=sockets(n.type);
+    const float height=std::max(82.0f,55.0f+22.0f*(float)inputs.size());
+    ImVec2 p=screen(n.pos),q=screen(ImVec2(n.pos.x+175,n.pos.y+height));
+    draw->AddRectFilled(p,q,IM_COL32(47,50,58,255),5);
+    draw->AddRectFilled(p,ImVec2(q.x,p.y+25*zoom),n.type==0?IM_COL32(147,96,42,255):IM_COL32(63,94,127,255),5);
+    draw->AddText(ImVec2(p.x+9*zoom,p.y+6*zoom),IM_COL32(255,255,255,255),nodeTypes[n.type]);
+    ImGui::SetCursorScreenPos(ImVec2(p.x+4,p.y+2));
+    ImGui::InvisibleButton("header",ImVec2(167*zoom,22*zoom));
     if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){
-     ImVec2 d=ImGui::GetIO().MouseDelta;n.pos.x+=d.x;n.pos.y+=d.y;
+     n.pos.x+=ImGui::GetIO().MouseDelta.x/zoom;
+     n.pos.y+=ImGui::GetIO().MouseDelta.y/zoom;
     }
-    ImGui::SetCursorScreenPos(ImVec2(p.x-8,p.y+27));
-    ImGui::InvisibleButton("input",ImVec2(18,18));
-    if(ImGui::IsItemClicked()&&linkFrom>=0&&linkFrom!=n.id){n.input=linkFrom;linkFrom=-1;}
-    if(ImGui::IsItemClicked(ImGuiMouseButton_Right))n.input=-1;
+    for(int i=0;i<(int)inputs.size();i++){
+     ImVec2 sp=socketPos(n,i);
+     draw->AddCircleFilled(sp,5*zoom,IM_COL32(233,171,77,255));
+     draw->AddText(ImVec2(sp.x+10*zoom,sp.y-6*zoom),IM_COL32(210,214,221,255),inputs[i]);
+     ImGui::SetCursorScreenPos(ImVec2(sp.x-9*zoom,sp.y-9*zoom));
+     ImGui::PushID(i);ImGui::InvisibleButton("in",ImVec2(18*zoom,18*zoom));
+     if(ImGui::IsItemClicked(ImGuiMouseButton_Right))
+      links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.to==n.id&&l.socket==i;}),links.end());
+     if(ImGui::IsItemClicked(ImGuiMouseButton_Left)&&connecting>=0&&connecting!=n.id){
+      links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.to==n.id&&l.socket==i;}),links.end());
+      links.push_back({connecting,n.id,i});connecting=-1;
+     }
+     ImGui::PopID();
+    }
     if(n.type!=0){
-     ImGui::SetCursorScreenPos(ImVec2(q.x-9,p.y+27));
-     ImGui::InvisibleButton("output",ImVec2(18,18));
-     if(ImGui::IsItemClicked())linkFrom=n.id;
+     ImVec2 op=screen(ImVec2(n.pos.x+175,n.pos.y+39));
+     draw->AddCircleFilled(op,5*zoom,IM_COL32(233,171,77,255));
+     ImGui::SetCursorScreenPos(ImVec2(op.x-9*zoom,op.y-9*zoom));
+     ImGui::InvisibleButton("out",ImVec2(18*zoom,18*zoom));
+     if(ImGui::IsItemClicked())connecting=n.id;
     }
-    if(n.type==2){
-     ImGui::SetCursorScreenPos(ImVec2(p.x+8,p.y+52));
-     ImGui::SetNextItemWidth(136);
-     ImGui::ColorEdit3("##color",n.color,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel);
-    }else if(n.type==3||n.type==4){
-     ImGui::SetCursorScreenPos(ImVec2(p.x+8,p.y+52));
-     ImGui::SetNextItemWidth(136);
-     ImGui::SliderFloat("##value",&n.value,0,1);
-    }else{
-     draw->AddText(ImVec2(p.x+10,p.y+54),IM_COL32(180,185,195,255),n.type==0?"Surface input":"Output");
+    if(n.type==2||n.type==3){
+     ImVec2 cp=screen(ImVec2(n.pos.x+10,n.pos.y+56));
+     ImGui::SetCursorScreenPos(cp);ImGui::SetNextItemWidth(145*zoom);
+     if(n.type==2)ImGui::ColorEdit3("##color",n.color,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel);
+     else ImGui::SliderFloat("##value",&n.value,0.0f,1.0f);
     }
     ImGui::PopID();
    }
-   if(linkFrom>=0){
-    if(ShaderNode* source=findNode(linkFrom)){
-     ImVec2 p(origin.x+source->pos.x+155,origin.y+source->pos.y+35);
-     draw->AddLine(p,ImGui::GetMousePos(),IM_COL32(255,194,78,255),2);
+   if(connecting>=0){
+    if(ShaderNode* source=findNode(connecting)){
+     ImVec2 p=screen(ImVec2(source->pos.x+175,source->pos.y+39));
+     draw->AddBezierCubic(p,ImVec2(p.x+60*zoom,p.y),ImGui::GetMousePos(),ImGui::GetMousePos(),IM_COL32(255,192,73,255),2.0f);
     }
-    if(ImGui::IsMouseClicked(ImGuiMouseButton_Right))linkFrom=-1;
+    if(ImGui::IsKeyPressed(ImGuiKey_Escape))connecting=-1;
    }
    draw->PopClipRect();
-   ImGui::SetCursorScreenPos(ImVec2(origin.x,origin.y+size.y));
-   ImGui::TextDisabled("Graph editor prototype: node connections are not yet compiled into GPU PBR shaders.");
+   ImGui::SetCursorScreenPos(ImVec2(origin.x,origin.y+area.y));
+   ImGui::TextDisabled("%d nodes | %d links | %.0f%% zoom | Graph editing only; GPU PBR compilation pending",(int)nodes.size(),(int)links.size(),zoom*100.0f);
   }
  }
  ImGui::End();
