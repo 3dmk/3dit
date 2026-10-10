@@ -12,6 +12,7 @@
 #include <map>
 #include <utility>
 #include <fstream>
+#include <climits>
 void ApplyN3DLiteTitlebarTheme();
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
@@ -1134,89 +1135,96 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 // Ground axes use the neutral grid palette; reserve RGB for transform gizmos.
-// Cache vertex normals across camera-only frames. Geometry comparison is exact;
-// editing commands and undo can mutate vectors without a central revision counter.
-struct NormalCacheEntry{
+// Persistent GPU triangle buffers. Geometry is uploaded only when mesh topology,
+// vertex coordinates, or smoothing strength changes; camera movement never uploads.
+struct GpuEntry{
  std::vector<Vector3> vertices;
  std::vector<std::vector<int>> faces;
- std::vector<Vector3> normals;
+ int group=-1;
+ float strength=-1.0f;
+ Mesh mesh{};
+ bool uploaded=false;
 };
-static std::vector<NormalCacheEntry> normalCache;
-if(normalCache.size()!=objects.size())normalCache.resize(objects.size());
-// Two-pass mesh rendering: one shader activation per object, then wireframe.
-// No shader switching per polygon; normal accumulation is linear in face count.
+static std::vector<GpuEntry> gpuCache;
+auto disposeGpu=[](GpuEntry& e){
+ if(e.uploaded){UnloadMesh(e.mesh);e.mesh={};e.uploaded=false;}
+};
+if(gpuCache.size()!=objects.size()){
+ for(auto& e:gpuCache)disposeGpu(e);
+ gpuCache.clear();
+ gpuCache.resize(objects.size());
+}
 rlDrawRenderBatchActive();
 if(backfaceCulling)rlEnableBackfaceCulling();
 else rlDisableBackfaceCulling();
 for(int oi=0;oi<(int)objects.size();oi++){
  const auto& o=objects[oi];
- const bool smoothEnabled=o.smoothingGroup>0&&o.smoothingValues[o.smoothingGroup]>0.0f;
- const bool pixel=smoothShaderReady&&smoothEnabled;
- const std::vector<Vector3>* smoothPtr=nullptr;
- if(smoothEnabled){
-  auto& cache=normalCache[oi];
-  bool unchanged=cache.vertices.size()==o.vertices.size()&&cache.faces==o.faces;
-  if(unchanged)for(size_t v=0;v<o.vertices.size();v++){
-   const Vector3 a=cache.vertices[v],b=o.vertices[v];
-   if(a.x!=b.x||a.y!=b.y||a.z!=b.z){unchanged=false;break;}
-  }
-  if(!unchanged){
-   cache.vertices=o.vertices;
-   cache.faces=o.faces;
-   cache.normals.assign(o.vertices.size(),Vector3{0,0,0});
-   for(const auto& f:o.faces){
-    if(f.size()<3)continue;
-    Vector3 n{};
-    for(size_t j=1;j+1<f.size();j++)
-     n=Vector3Add(n,Vector3CrossProduct(Vector3Subtract(o.vertices[f[j]],o.vertices[f[0]]),Vector3Subtract(o.vertices[f[j+1]],o.vertices[f[0]])));
-    for(int vi:f)if(vi>=0&&vi<(int)cache.normals.size())
-     cache.normals[vi]=Vector3Add(cache.normals[vi],n);
-   }
-   for(auto& n:cache.normals)if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
-  }
-  smoothPtr=&cache.normals;
+ auto& entry=gpuCache[oi];
+ const float strength=o.smoothingGroup>0?o.smoothingValues[o.smoothingGroup]:0.0f;
+ bool dirty=!entry.uploaded||entry.group!=o.smoothingGroup||entry.strength!=strength||
+            entry.faces!=o.faces||entry.vertices.size()!=o.vertices.size();
+ if(!dirty)for(size_t i=0;i<o.vertices.size();i++){
+  const Vector3 a=entry.vertices[i],b=o.vertices[i];
+  if(a.x!=b.x||a.y!=b.y||a.z!=b.z){dirty=true;break;}
  }
- if(pixel){
-  const auto& mat=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
-  SetShaderValue(smoothShader,locBase,mat.baseColor,SHADER_UNIFORM_VEC3);
-  SetShaderValue(smoothShader,locRough,&mat.roughness,SHADER_UNIFORM_FLOAT);
-  SetShaderValue(smoothShader,locMetal,&mat.metallic,SHADER_UNIFORM_FLOAT);
-  SetShaderValue(smoothShader,locSpec,&mat.specular,SHADER_UNIFORM_FLOAT);
-  float cameraXYZ[3]={camera.position.x,camera.position.y,camera.position.z};
-  SetShaderValue(smoothShader,locCamera,cameraXYZ,SHADER_UNIFORM_VEC3);
-  BeginShaderMode(smoothShader);
- }
- for(int fi=0;fi<(int)o.faces.size();fi++){
-  const auto& f=o.faces[fi];
-  if(f.size()<3)continue;
-  const bool highlighted=oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0));
-  if(highlighted)continue; // Draw selection after the material pass.
-  const bool smoothTriangle=smoothEnabled;
-  for(size_t j=1;j+1<f.size();j++){
-   const int ids[3]={f[0],f[j],f[j+1]};
-   const Vector3 p[3]={world(o,ids[0]),world(o,ids[1]),world(o,ids[2])};
-   if(!smoothTriangle){
-    DrawTriangle3D(p[0],p[1],p[2],shadeMaterialTriangle(o,p[0],p[1],p[2],camera.position));
-    continue;
-   }
-   Vector3 flat=Vector3CrossProduct(Vector3Subtract(p[1],p[0]),Vector3Subtract(p[2],p[0]));
-   if(Vector3Length(flat)>1e-7f)flat=Vector3Normalize(flat);
-   const float weight=std::clamp(o.smoothingValues[o.smoothingGroup]/100.0f,0.0f,1.0f);
-   rlBegin(RL_TRIANGLES);
-   for(int k=0;k<3;k++){
-    Vector3 blended=Vector3Add(Vector3Scale(flat,1.0f-weight),Vector3Scale((*smoothPtr)[ids[k]],weight));
-    if(pixel){rlColor4ub(255,255,255,255);rlNormal3f(blended.x,blended.y,blended.z);}
-    else {
-     Color c=shadeMaterialTriangle(o,p[k],p[(k+1)%3],p[(k+2)%3],camera.position,blended);
-     rlColor4ub(c.r,c.g,c.b,c.a);
+ if(dirty){
+  disposeGpu(entry);
+  entry.vertices=o.vertices;entry.faces=o.faces;
+  entry.group=o.smoothingGroup;entry.strength=strength;
+  std::vector<Vector3> averaged(o.vertices.size(),Vector3{});
+  if(strength>0.0f)for(const auto& f:o.faces){
+   if(f.size()<3)continue;
+   Vector3 normal{};
+   for(size_t j=1;j+1<f.size();j++)
+    normal=Vector3Add(normal,Vector3CrossProduct(Vector3Subtract(o.vertices[f[j]],o.vertices[f[0]]),Vector3Subtract(o.vertices[f[j+1]],o.vertices[f[0]])));
+   for(int vi:f)if(vi>=0&&vi<(int)averaged.size())averaged[vi]=Vector3Add(averaged[vi],normal);
+  }
+  for(auto& n:averaged)if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
+  size_t triangleCount=0;
+  for(const auto& f:o.faces)if(f.size()>=3)triangleCount+=f.size()-2;
+  if(triangleCount>0&&triangleCount<=static_cast<size_t>(INT_MAX/3)){
+   entry.mesh.vertexCount=(int)(triangleCount*3);
+   entry.mesh.triangleCount=(int)triangleCount;
+   entry.mesh.vertices=(float*)MemAlloc(triangleCount*9*sizeof(float));
+   entry.mesh.normals=(float*)MemAlloc(triangleCount*9*sizeof(float));
+   size_t cursor=0;
+   const float weight=std::clamp(strength/100.0f,0.0f,1.0f);
+   for(const auto& f:o.faces)if(f.size()>=3)for(size_t j=1;j+1<f.size();j++){
+    const int ids[3]={f[0],f[j],f[j+1]};
+    const Vector3 p[3]={o.vertices[ids[0]],o.vertices[ids[1]],o.vertices[ids[2]]};
+    Vector3 flat=Vector3CrossProduct(Vector3Subtract(p[1],p[0]),Vector3Subtract(p[2],p[0]));
+    if(Vector3Length(flat)>1e-7f)flat=Vector3Normalize(flat);
+    for(int k=0;k<3;k++){
+     Vector3 n=Vector3Add(Vector3Scale(flat,1.0f-weight),Vector3Scale(averaged[ids[k]],weight));
+     if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
+     entry.mesh.vertices[cursor]=p[k].x;
+     entry.mesh.normals[cursor++]=n.x;
+     entry.mesh.vertices[cursor]=p[k].y;
+     entry.mesh.normals[cursor++]=n.y;
+     entry.mesh.vertices[cursor]=p[k].z;
+     entry.mesh.normals[cursor++]=n.z;
     }
-    rlVertex3f(p[k].x,p[k].y,p[k].z);
    }
-   rlEnd();
+   UploadMesh(&entry.mesh,false);
+   entry.uploaded=entry.mesh.vaoId!=0;
   }
  }
- if(pixel)EndShaderMode();
- // Selection and topology overlays are never processed by the material shader.
+ if(entry.uploaded){
+  Material material=LoadMaterialDefault();
+  if(smoothShaderReady){
+   const auto& mat=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
+   material.shader=smoothShader;
+   SetShaderValue(smoothShader,locBase,mat.baseColor,SHADER_UNIFORM_VEC3);
+   SetShaderValue(smoothShader,locRough,&mat.roughness,SHADER_UNIFORM_FLOAT);
+   SetShaderValue(smoothShader,locMetal,&mat.metallic,SHADER_UNIFORM_FLOAT);
+   SetShaderValue(smoothShader,locSpec,&mat.specular,SHADER_UNIFORM_FLOAT);
+   float cameraXYZ[3]={camera.position.x,camera.position.y,camera.position.z};
+   SetShaderValue(smoothShader,locCamera,cameraXYZ,SHADER_UNIFORM_VEC3);
+  }
+  DrawMesh(entry.mesh,material,MatrixTranslate(o.position.x,o.position.y,o.position.z));
+  // The default material owns shared default textures; do not unload it per frame.
+ }
+ // Keep sub-object selection and topology edges as an independent overlay.
  for(int fi=0;fi<(int)o.faces.size();fi++){
   const auto& f=o.faces[fi];
   if(f.size()<3)continue;
@@ -1635,6 +1643,8 @@ EndDrawing();
 saveWindowLayout();
 ImGui::SaveIniSettingsToDisk("N3DLite-layout.ini");
 if(crosshairCursorHidden)ShowCursor();
+for(auto& e:gpuCache)disposeGpu(e);
+if(smoothShaderReady)UnloadShader(smoothShader);
 rlImGuiShutdown();
 if(uiFontLoaded)UnloadFont(uiFont);
 CloseWindow();
