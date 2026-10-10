@@ -1729,6 +1729,8 @@ if(materialsPanelOpen){
   static std::vector<ShaderNode> nodes;
   static std::vector<ShaderLink> links;
   static int nextId=1,connecting=-1;
+  static std::string graphFeedback;
+  static bool graphLoaded=false;
   static bool hasPbr=false;
   static ImVec2 pan(0,0);
   static float zoom=1.0f;
@@ -1748,6 +1750,38 @@ if(materialsPanelOpen){
     default:return {};
    }
   };
+  // Graph persistence uses a versioned, bounded text format; never trust file indices.
+  if(!graphLoaded){
+   graphLoaded=true;
+   std::ifstream in("N3DLite-shader-graph.txt");
+   std::string magic;int count=0,linkCount=0,flag=0;
+   if(in>>magic>>flag>>count>>linkCount&&magic=="N3DLiteGraphV1"&&count>=0&&count<=2048&&linkCount>=0&&linkCount<=8192){
+    std::vector<ShaderNode> loaded;std::vector<ShaderLink> loadedLinks;
+    bool ok=true;
+    for(int k=0;k<count;k++){
+     ShaderNode n{};
+     if(!(in>>n.id>>n.type>>n.pos.x>>n.pos.y>>n.value>>n.color[0]>>n.color[1]>>n.color[2])||n.id<=0||n.type<0||n.type>=16){ok=false;break;}
+     loaded.push_back(n);
+    }
+    for(int k=0;k<linkCount&&ok;k++){
+     ShaderLink l{};
+     if(!(in>>l.from>>l.to>>l.socket)){ok=false;break;}
+     loadedLinks.push_back(l);
+    }
+    if(ok){
+     nodes=std::move(loaded);links=std::move(loadedLinks);
+     hasPbr=flag!=0;for(const auto& n:nodes)nextId=std::max(nextId,n.id+1);
+    }
+   }
+  }
+  auto saveGraph=[&](){
+   std::ofstream out("N3DLite-shader-graph.txt",std::ios::trunc);
+   if(!out){graphFeedback="Could not save shader graph";return;}
+   out<<"N3DLiteGraphV1 "<<(hasPbr?1:0)<<" "<<nodes.size()<<" "<<links.size()<<"\\n";
+   for(const auto& n:nodes)out<<n.id<<" "<<n.type<<" "<<n.pos.x<<" "<<n.pos.y<<" "<<n.value<<" "<<n.color[0]<<" "<<n.color[1]<<" "<<n.color[2]<<"\\n";
+   for(const auto& l:links)out<<l.from<<" "<<l.to<<" "<<l.socket<<"\\n";
+   graphFeedback="Shader graph saved";
+  };
   if(!hasPbr){
    if(ImGui::Button("Add PBR_Shader",ImVec2(-1,38))){
     hasPbr=true;nodes.push_back({nextId++,0,ImVec2(390,80)});
@@ -1758,6 +1792,8 @@ if(materialsPanelOpen){
     checkpoint();objects[selected].materialId=activeMaterial;
    }
    ImGui::SameLine();
+   if(ImGui::Button("Save Graph"))saveGraph();
+   ImGui::SameLine();
    if(ImGui::Button("Reset View")){pan=ImVec2(0,0);zoom=1.0f;}
    ImGui::SameLine();
    if(ImGui::Button("Clear Graph"))ImGui::OpenPopup("Clear Shader Graph?");
@@ -1767,6 +1803,7 @@ if(materialsPanelOpen){
     ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
    }
+   if(!graphFeedback.empty())ImGui::TextDisabled("%s",graphFeedback.c_str());
    ImGui::TextDisabled("Right-click empty canvas: add node | drag header: move | middle-drag: pan | wheel: zoom | click sockets: connect | right-click input: unlink");
    ImVec2 origin=ImGui::GetCursorScreenPos();
    ImVec2 area=ImGui::GetContentRegionAvail();area.x=std::max(250.0f,area.x);area.y=std::max(200.0f,area.y-22);
@@ -1829,8 +1866,37 @@ if(materialsPanelOpen){
      if(ImGui::IsItemClicked(ImGuiMouseButton_Right))
       links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.to==n.id&&l.socket==i;}),links.end());
      if(ImGui::IsItemClicked(ImGuiMouseButton_Left)&&connecting>=0&&connecting!=n.id){
-      links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.to==n.id&&l.socket==i;}),links.end());
-      links.push_back({connecting,n.id,i});connecting=-1;
+      ShaderNode* source=findNode(connecting);
+      // Socket categories: 0 scalar, 1 color, 2 vector, 3 normal.
+      auto outputKind=[](int t){switch(t){case 1:case 2:case 6:case 12:case 15:return 1;case 5:return 3;case 8:return 2;default:return 0;}};
+      auto inputKind=[&](int t,int slot){
+       if(t==0){if(slot==0||slot==5)return 1;if(slot==3)return 3;return 0;}
+       if(t==5)return slot==0?1:0;
+       if(t==1)return 2;
+       if(t==6)return slot<2?1:0;
+       if(t==12)return slot==0?1:0;
+       if(t==14)return 1;
+       return 0;
+      };
+      const int out=source?outputKind(source->type):-1,need=inputKind(n.type,i);
+      const bool compatible=out==need||(out==0&&need==1)||(out==1&&need==0)||(out==3&&need==2);
+      // A cycle exists if the proposed source is already downstream of this input.
+      std::vector<int> pending={n.id};
+      std::set<int> visited;
+      bool cycle=false;
+      while(!pending.empty()){
+       int current=pending.back();pending.pop_back();
+       if(!visited.insert(current).second)continue;
+       if(current==connecting){cycle=true;break;}
+       for(const auto& link:links)if(link.from==current)pending.push_back(link.to);
+      }
+      if(!compatible)graphFeedback="Incompatible socket types";
+      else if(cycle)graphFeedback="Connection rejected: shader graph cycle";
+      else{
+       links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.to==n.id&&l.socket==i;}),links.end());
+       links.push_back({connecting,n.id,i});graphFeedback="Connected";
+      }
+      connecting=-1;
      }
      ImGui::PopID();
     }
