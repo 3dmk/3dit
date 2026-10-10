@@ -1730,6 +1730,7 @@ if(materialsPanelOpen){
   static std::vector<ShaderLink> links;
   static int nextId=1,connecting=-1;
   static int draggingNode=-1;
+  static int editingColorNode=-1;
   static bool draggingWire=false;
   static std::string graphFeedback;
   static bool graphLoaded=false;
@@ -1850,11 +1851,12 @@ if(materialsPanelOpen){
    // otherwise compete with the full-canvas InvisibleButton and steal drags.
    const ImVec2 mouse=ImGui::GetMousePos();
    auto inRect=[&](ImVec2 lo,ImVec2 hi){return mouse.x>=lo.x&&mouse.y>=lo.y&&mouse.x<=hi.x&&mouse.y<=hi.y;};
-   int hoverNode=-1,hoverSocketNode=-1,hoverSocketIndex=-1,hoverOutput=-1;
+   int hoverNode=-1,hoverSocketNode=-1,hoverSocketIndex=-1,hoverOutput=-1,hoverColor=-1;
    for(auto it=nodes.rbegin();it!=nodes.rend();++it){
     auto& n=*it;auto inputs=sockets(n.type);
     ImVec2 p=screen(n.pos),q=screen(ImVec2(n.pos.x+175,n.pos.y+std::max(82.0f,55.0f+22.0f*(float)inputs.size())));
     if(hoverNode<0&&inRect(p,q))hoverNode=n.id;
+    if(n.type==2&&hoverColor<0&&inRect(screen(ImVec2(n.pos.x+10,n.pos.y+54)),screen(ImVec2(n.pos.x+160,n.pos.y+78))))hoverColor=n.id;
     for(int i=0;i<(int)inputs.size();i++){
      ImVec2 sp=socketPos(n,i);
      if(hoverSocketNode<0&&std::abs(mouse.x-sp.x)<11*zoom&&std::abs(mouse.y-sp.y)<11*zoom){
@@ -1865,7 +1867,8 @@ if(materialsPanelOpen){
     if(n.type!=0&&hoverOutput<0&&std::abs(mouse.x-op.x)<11*zoom&&std::abs(mouse.y-op.y)<11*zoom)hoverOutput=n.id;
    }
    if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&hoverNode<0&&hoverSocketNode<0)ImGui::OpenPopup("Add Shader Node");
-   if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverOutput>=0){connecting=hoverOutput;draggingWire=true;}
+   if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverColor>=0){editingColorNode=hoverColor;ImGui::OpenPopup("Node Color Picker");}
+   else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverOutput>=0){connecting=hoverOutput;draggingWire=true;}
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverSocketNode<0&&hoverNode>=0){
     ShaderNode* n=findNode(hoverNode);
     ImVec2 p=screen(n->pos);
@@ -1932,11 +1935,16 @@ if(materialsPanelOpen){
      draw->AddCircleFilled(op,5*zoom,IM_COL32(233,171,77,255));
      // Output socket starts a drag wire or a two-click connection.
     }
-    if(n.type==2||n.type==3){
+    if(n.type==2){
+     ImVec2 lo=screen(ImVec2(n.pos.x+10,n.pos.y+54));
+     ImVec2 hi=screen(ImVec2(n.pos.x+160,n.pos.y+78));
+     ImU32 tint=ImGui::ColorConvertFloat4ToU32(ImVec4(n.color[0],n.color[1],n.color[2],1.0f));
+     draw->AddRectFilled(lo,hi,tint,3);
+     draw->AddRect(lo,hi,IM_COL32(210,215,220,255),3);
+    }else if(n.type==3){
      ImVec2 cp=screen(ImVec2(n.pos.x+10,n.pos.y+56));
      ImGui::SetCursorScreenPos(cp);ImGui::SetNextItemWidth(145*zoom);
-     if(n.type==2)ImGui::ColorEdit3("##color",n.color,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel);
-     else ImGui::SliderFloat("##value",&n.value,0.0f,1.0f);
+     ImGui::SliderFloat("##value",&n.value,0.0f,1.0f);
     }
     ImGui::PopID();
    }
@@ -1949,6 +1957,16 @@ if(materialsPanelOpen){
     if(ImGui::IsKeyPressed(ImGuiKey_Escape)){connecting=-1;draggingWire=false;}
    }
    draw->PopClipRect();
+   // Popup is outside the clipped node canvas so its controls receive input normally.
+   if(ImGui::BeginPopup("Node Color Picker")){
+    ShaderNode* chosen=findNode(editingColorNode);
+    if(chosen&&chosen->type==2){
+     ImGui::Text("Color node #%d",chosen->id);
+     ImGui::ColorPicker3("##NodeColorPicker",chosen->color);
+     ImGui::ColorEdit3("RGB",chosen->color);
+    }else ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+   }
    ImGui::SetCursorScreenPos(ImVec2(origin.x,origin.y+area.y));
    ImGui::TextDisabled("%d nodes | %d links | %.0f%% zoom | Graph editing only; GPU PBR compilation pending",(int)nodes.size(),(int)links.size(),zoom*100.0f);
   }
