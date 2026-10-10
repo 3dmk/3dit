@@ -623,8 +623,22 @@ Vector3 pivot(const MeshObject& o){auto a=active(o);if(a.empty())return o.positi
 float segmentDistance(Vector2 p,Vector2 a,Vector2 b){Vector2 d=Vector2Subtract(b,a),v=Vector2Subtract(p,a);
  float t=std::clamp(Vector2DotProduct(v,d)/std::max(1.0f,Vector2DotProduct(d,d)),0.0f,1.0f);
  return Vector2Distance(p,Vector2Add(a,Vector2Scale(d,t)));}
+// Move plane handles: XY=3, XZ=4, YZ=5.
+Vector3 planeHandlePoint(Vector3 center,int handle,float size){
+ Vector3 offset{};
+ const int a=handle==3?0:handle==4?0:1;
+ const int b=handle==3?1:2;
+ (&offset.x)[a]=size*0.52f;
+ (&offset.x)[b]=size*0.52f;
+ return Vector3Add(center,offset);
+}
 int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode!=0&&active(objects[selected]).empty()))return -1;Vector3 p=pivot(objects[selected]);
  Vector2 a=GetWorldToScreen(p,camera);int best=-1;float distance=16;
+ if(tool==1)for(int h=3;h<=5;h++){
+  Vector2 center=GetWorldToScreen(planeHandlePoint(p,h,gizmoSize),camera);
+  float d=Vector2Distance(mouse,center);
+  if(d<18.0f&&d<distance){distance=d;best=h;}
+ }
  for(int i=0;i<3;i++){
   if(tool==2){
    Vector3 u=i==0?Vector3{0,1,0}:Vector3{1,0,0};
@@ -671,6 +685,34 @@ void startDrag(int axis){if(selected<0)return;checkpoint();auto& o=objects[selec
  drag={};drag.active=true;drag.axis=axis;drag.start=GetMousePosition();drag.startPos=o.position;
  drag.center=pivot(o);drag.startVertices=o.vertices;drag.affected=active(o);}
 void applyDrag(){if(!drag.active||selected<0)return;auto& o=objects[selected];
+ if(tool==1&&drag.axis>=3){
+  const int a=drag.axis==3?0:drag.axis==4?0:1;
+  const int b=drag.axis==3?1:2;
+  Vector3 planeNormal{};(&planeNormal.x)[3-a-b]=1.0f;
+  // Screen-space plane projection with camera-facing fallback for edge-on views.
+  Vector3 planeA{},planeB{};(&planeA.x)[a]=gizmoSize;(&planeB.x)[b]=gizmoSize;
+  Vector2 center=GetWorldToScreen(drag.center,camera);
+  Vector2 screenA=Vector2Subtract(GetWorldToScreen(Vector3Add(drag.center,planeA),camera),center);
+  Vector2 screenB=Vector2Subtract(GetWorldToScreen(Vector3Add(drag.center,planeB),camera),center);
+  Vector2 delta=Vector2Subtract(GetMousePosition(),drag.start);
+  float det=screenA.x*screenB.y-screenA.y*screenB.x;
+  float da=0.0f,db=0.0f;
+  if(fabsf(det)>16.0f){
+   da=(delta.x*screenB.y-delta.y*screenB.x)/det*gizmoSize;
+   db=(screenA.x*delta.y-screenA.y*delta.x)/det*gizmoSize;
+  }else{
+   float aa=Vector2DotProduct(screenA,screenA),bb=Vector2DotProduct(screenB,screenB);
+   if(aa>=bb&&aa>1.0f)da=Vector2DotProduct(delta,screenA)/aa*gizmoSize;
+   else if(bb>1.0f)db=Vector2DotProduct(delta,screenB)/bb*gizmoSize;
+  }
+  Vector3 shift{};(&shift.x)[a]=da;(&shift.x)[b]=db;
+  o.position=drag.startPos;
+  o.vertices=drag.startVertices;
+  if(mode==0)o.position=Vector3Add(drag.startPos,shift);
+  else for(int i:drag.affected)if(i>=0&&i<(int)o.vertices.size())
+   o.vertices[i]=Vector3Add(drag.startVertices[i],shift);
+  return;
+ }
  Vector3 axis{};(&axis.x)[drag.axis]=1.35f*gizmoSize;
  Vector2 a=GetWorldToScreen(drag.center,camera),b=GetWorldToScreen(Vector3Add(drag.center,axis),camera);
  Vector2 direction=Vector2Subtract(b,a),delta=Vector2Subtract(GetMousePosition(),drag.start);
@@ -1024,7 +1066,7 @@ while(!WindowShouldClose()){
    // Prioritize the arrow/cube endpoint, then allow component picking
    // over the thin axis shaft. Rotation rings are direct gizmo targets.
    int axis=handleHit(m);
-   if(axis>=0&&mode!=0&&tool!=2){
+   if(axis>=0&&axis<3&&mode!=0&&tool!=2){
     Vector3 handleDirection{};(&handleDirection.x)[axis]=1.6f*gizmoSize;
     const Vector2 endpoint=GetWorldToScreen(Vector3Add(pivot(objects[selected]),handleDirection),camera);
     const bool onHandle=Vector2Distance(m,endpoint)<=20.0f;
@@ -1278,6 +1320,20 @@ if(selected>=0&&selected<(int)objects.size()){
  }else{
   const Vector3 directions[3]={{1,0,0},{0,1,0},{0,0,1}};
   const Color colors[3]={RED,GREEN,BLUE};
+  if(tool==1){
+   const Color planeColors[3]={{235,205,65,210},{185,85,225,210},{65,210,210,210}};
+   for(int h=3;h<=5;h++){
+    const int a=h==3?0:h==4?0:1,b=h==3?1:2;
+    Vector3 u{},v{};(&u.x)[a]=1;(&v.x)[b]=1;
+    Vector3 corner=Vector3Add(p,Vector3Scale(Vector3Add(u,v),0.75f*gizmoSize));
+    Vector3 edgeA=Vector3Add(p,Vector3Scale(u,0.75f*gizmoSize));
+    Vector3 edgeB=Vector3Add(p,Vector3Scale(v,0.75f*gizmoSize));
+    DrawTriangle3D(p,edgeA,corner,planeColors[h-3]);
+    DrawTriangle3D(p,corner,edgeB,planeColors[h-3]);
+    DrawLine3D(edgeA,corner,planeColors[h-3]);
+    DrawLine3D(corner,edgeB,planeColors[h-3]);
+   }
+  }
   for(int axis=0;axis<3;axis++){
    Vector3 tip=Vector3Add(p,Vector3Scale(directions[axis],1.6f*gizmoSize));
    DrawLine3D(p,tip,colors[axis]);
