@@ -57,24 +57,39 @@ static const char* smoothVS=R"GLSL(#version 330
 in vec3 vertexPosition;
 in vec3 vertexNormal;
 uniform mat4 mvp;
-out vec3 nrm;
-void main(){nrm=vertexNormal;gl_Position=mvp*vec4(vertexPosition,1.0);})GLSL";
+uniform mat4 matModel;
+out vec3 worldNormal;
+out vec3 worldPosition;
+void main(){
+ worldPosition=(matModel*vec4(vertexPosition,1.0)).xyz;
+ worldNormal=mat3(matModel)*vertexNormal;
+ gl_Position=mvp*vec4(vertexPosition,1.0);
+}
+)GLSL";
 static const char* smoothFS=R"GLSL(#version 330
-in vec3 nrm;
+in vec3 worldNormal;
+in vec3 worldPosition;
 out vec4 finalColor;
 uniform vec3 baseColor;
+uniform vec3 cameraPosition;
 uniform float roughness;
 uniform float metallic;
 uniform float specular;
 void main(){
- vec3 n=normalize(nrm),light=normalize(vec3(0.35,-0.55,0.75));
- if(!gl_FrontFacing)n=-n;
- float d=max(dot(n,light),0.0);
- vec3 v=vec3(0.0,0.0,1.0);
- float shine=pow(max(dot(n,normalize(light+v)),0.0),2.0+126.0*pow(1.0-clamp(roughness,0.02,1.0),2.0));
+ vec3 n=normalize(worldNormal);
+ vec3 v=normalize(cameraPosition-worldPosition);
+ if(dot(n,v)<0.0)n=-n;
+ vec3 light=normalize(vec3(0.35,-0.55,0.75));
+ float ndl=max(dot(n,light),0.0);
+ vec3 h=normalize(light+v);
+ float shine=pow(max(dot(n,h),0.0),2.0+126.0*pow(1.0-clamp(roughness,0.02,1.0),2.0));
  float metal=clamp(metallic,0.0,1.0);
- finalColor=vec4(clamp(baseColor*(0.22+0.78*d)*(1.0-0.78*metal)+shine*(0.06+0.9*specular)*mix(vec3(1.0),baseColor,metal),0.0,1.0),1.0);
-})GLSL";
+ vec3 diffuse=baseColor*(0.22+0.78*ndl)*(1.0-0.78*metal);
+ vec3 specColor=mix(vec3(1.0),baseColor,metal);
+ vec3 reflection=shine*(0.06+0.9*clamp(specular,0.0,1.0))*specColor*(0.35+0.65*ndl);
+ finalColor=vec4(clamp(diffuse+reflection,0.0,1.0),1.0);
+}
+)GLSL";
 struct Snapshot {std::vector<MeshObject> objects;int selected,face,sub;};
 std::vector<MeshObject> objects;std::vector<Snapshot> undoStack,redoStack;int selected=-1,face=-1,mode=0,tool=1,sub=-1;Camera3D camera{};float gizmoSize=1.0f;
 void checkpoint(){undoStack.push_back({objects,selected,face,sub});if(undoStack.size()>80)undoStack.erase(undoStack.begin());redoStack.clear();}
@@ -748,6 +763,7 @@ int main(){
  const int locRough=GetShaderLocation(smoothShader,"roughness");
  const int locMetal=GetShaderLocation(smoothShader,"metallic");
  const int locSpec=GetShaderLocation(smoothShader,"specular");
+ const int locCamera=GetShaderLocation(smoothShader,"cameraPosition");
  rlImGuiSetup(true);
  ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
  ImGui::GetIO().IniFilename="N3DLite-layout.ini";
@@ -1144,6 +1160,8 @@ for(int oi=0;oi<(int)objects.size();oi++){
   SetShaderValue(smoothShader,locRough,&mat.roughness,SHADER_UNIFORM_FLOAT);
   SetShaderValue(smoothShader,locMetal,&mat.metallic,SHADER_UNIFORM_FLOAT);
   SetShaderValue(smoothShader,locSpec,&mat.specular,SHADER_UNIFORM_FLOAT);
+  float cameraXYZ[3]={camera.position.x,camera.position.y,camera.position.z};
+  SetShaderValue(smoothShader,locCamera,cameraXYZ,SHADER_UNIFORM_VEC3);
   BeginShaderMode(smoothShader);
  }
  for(int fi=0;fi<(int)o.faces.size();fi++){
