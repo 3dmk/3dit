@@ -12,6 +12,7 @@
 #include <map>
 #include <utility>
 #include <fstream>
+void ApplyN3DLiteTitlebarTheme();
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
@@ -716,6 +717,7 @@ int main(){
  }
  SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);
  InitWindow(hasSavedWindow?savedW:1280,hasSavedWindow?savedH:760,"N3DLite Native v0.8 - C++23");
+ ApplyN3DLiteTitlebarTheme();
  if(hasSavedWindow)SetWindowPosition(savedX,savedY);
  SetTargetFPS(60);
  rlImGuiSetup(true);
