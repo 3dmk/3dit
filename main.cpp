@@ -1147,13 +1147,14 @@ struct GpuEntry{
 };
 static std::vector<GpuEntry> gpuCache;
 auto disposeGpu=[](GpuEntry& e){
- if(e.uploaded){UnloadMesh(e.mesh);e.mesh={};e.uploaded=false;}
+ if(e.mesh.vertices||e.mesh.normals||e.mesh.vaoId){UnloadMesh(e.mesh);e.mesh={};e.uploaded=false;}
 };
 if(gpuCache.size()!=objects.size()){
  for(auto& e:gpuCache)disposeGpu(e);
  gpuCache.clear();
  gpuCache.resize(objects.size());
 }
+const double meshDrawStart=GetTime();
 rlDrawRenderBatchActive();
 if(backfaceCulling)rlEnableBackfaceCulling();
 else rlDisableBackfaceCulling();
@@ -1172,7 +1173,7 @@ for(int oi=0;oi<(int)objects.size();oi++){
   // This avoids destroying/recreating VAOs and VBOs during vertex drags.
   size_t requiredTriangles=0;
   for(const auto& f:o.faces)if(f.size()>=3)requiredTriangles+=f.size()-2;
-  const bool reuseBuffers=entry.uploaded&&entry.mesh.triangleCount==(int)requiredTriangles&&
+  const bool reuseBuffers=entry.uploaded&&requiredTriangles>0&&entry.mesh.triangleCount==(int)requiredTriangles&&
                           entry.mesh.vertices&&entry.mesh.normals;
   if(!reuseBuffers)disposeGpu(entry);
   entry.vertices=o.vertices;entry.faces=o.faces;
@@ -1218,7 +1219,7 @@ for(int oi=0;oi<(int)objects.size();oi++){
     UpdateMeshBuffer(entry.mesh,2,entry.mesh.normals,(int)(triangleCount*9*sizeof(float)),0);
    }else{
     UploadMesh(&entry.mesh,true);
-    entry.uploaded=entry.mesh.vaoId!=0;
+    entry.uploaded=entry.mesh.vaoId!=0||entry.mesh.vboId!=nullptr;
    }
   }
  }
@@ -1251,6 +1252,7 @@ for(int oi=0;oi<(int)objects.size();oi++){
 }
 rlDrawRenderBatchActive();
 rlDisableBackfaceCulling();
+const double meshDrawMs=(GetTime()-meshDrawStart)*1000.0;
 // Draw the selected transform overlay only after all opaque object geometry.
 if(selected>=0&&selected<(int)objects.size()){
  auto& o=objects[selected];
@@ -1573,6 +1575,7 @@ if(ImGui::Begin("Create Objects")){
 ImGui::End();
 // Material library and object assignment; viewport base color is live.
 if(ImGui::Begin("Smoothing Groups")){
+ ImGui::TextDisabled("Mesh submission: %.2f ms | Frame: %.1f FPS",meshDrawMs,(double)GetFPS());
  if(selected>=0&&selected<(int)objects.size()){
   MeshObject& o=objects[selected];
   ImGui::Text("Object: %s",o.name.c_str());
