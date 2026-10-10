@@ -1720,43 +1720,109 @@ if(ImGui::Begin("Smoothing Groups")){
  }else ImGui::TextDisabled("Select an object to edit smoothing");
 }
 ImGui::End();
+// Node graph editor: blank until the user creates a PBR shader.
+// Graph is editor-owned; legacy viewport material stays intact until compilation is implemented.
 if(materialsPanelOpen){
-ImGui::SetNextWindowSize(ImVec2(350,430),ImGuiCond_FirstUseEver);
-if(ImGui::Begin("Materials",&materialsPanelOpen)){
- if(ImGui::Button("New Material")){
-  EditorMaterial m; m.name="Material "+std::to_string(materials.size());
-  materials.push_back(m);activeMaterial=(int)materials.size()-1;
- }
- ImGui::SameLine();
- if(ImGui::Button("Duplicate")&&activeMaterial>=0&&activeMaterial<(int)materials.size()){
-  EditorMaterial m=materials[activeMaterial];m.name+=" Copy";
-  materials.push_back(m);activeMaterial=(int)materials.size()-1;
- }
- ImGui::Separator();
- if(ImGui::BeginListBox("##MaterialList",ImVec2(-1,110))){
-  for(int i=0;i<(int)materials.size();i++)
-   if(ImGui::Selectable(materials[i].name.c_str(),activeMaterial==i))activeMaterial=i;
-  ImGui::EndListBox();
- }
- if(activeMaterial>=0&&activeMaterial<(int)materials.size()){
-  EditorMaterial& m=materials[activeMaterial];
-  char name[128];snprintf(name,sizeof(name),"%s",m.name.c_str());
-  if(ImGui::InputText("Name",name,sizeof(name)))m.name=name;
-  ImGui::ColorEdit3("Base Color",m.baseColor);
-  ImGui::SliderFloat("Roughness",&m.roughness,0.0f,1.0f);
-  ImGui::SliderFloat("Metallic",&m.metallic,0.0f,1.0f);
-  ImGui::SliderFloat("Specular",&m.specular,0.0f,1.0f);
-  ImGui::TextDisabled("Live viewport approximation (Blinn-Phong), not full PBR");
-  if(selected>=0&&selected<(int)objects.size()){
-   ImGui::Text("Selected: %s",objects[selected].name.c_str());
-   if(ImGui::Button("Assign to Selected",ImVec2(-1,0))){
+ ImGui::SetNextWindowSize(ImVec2(800,540),ImGuiCond_FirstUseEver);
+ if(ImGui::Begin("Materials",&materialsPanelOpen)){
+  struct ShaderNode {int id;int type;ImVec2 pos;float value;float color[3];int input=-1;};
+  static std::vector<ShaderNode> nodes;
+  static int nextId=1,linkFrom=-1;
+  static bool hasPbr=false;
+  const char* nodeTypes[]={"PBR_Shader","Image Texture","Color","Value","Noise","Normal Map","Mix","Math"};
+  if(!hasPbr){
+   if(ImGui::Button("Add PBR_Shader",ImVec2(-1,38))){
+    hasPbr=true;
+    nodes.push_back({nextId++,0,ImVec2(410,125),0.5f,{0.8f,0.8f,0.8f},-1});
+   }
+   ImGui::TextDisabled("Create a PBR shader to start the material graph.");
+  }else{
+   if(ImGui::Button("Assign to Selected")&&selected>=0&&selected<(int)objects.size()){
     checkpoint();objects[selected].materialId=activeMaterial;
    }
-   ImGui::Text("Assigned: %s",materials[std::clamp(objects[selected].materialId,0,(int)materials.size()-1)].name.c_str());
-  }else ImGui::TextDisabled("Select an object to assign material");
+   ImGui::SameLine();
+   if(ImGui::Button("Clear Graph"))ImGui::OpenPopup("Clear Shader Graph?");
+   if(ImGui::BeginPopupModal("Clear Shader Graph?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
+    ImGui::TextUnformatted("Remove the PBR shader and all nodes?");
+    if(ImGui::Button("Remove")){nodes.clear();hasPbr=false;linkFrom=-1;ImGui::CloseCurrentPopup();}
+    ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+   }
+   ImGui::TextDisabled("Right-click canvas to add nodes. Drag an output socket to an input socket.");
+   const ImVec2 origin=ImGui::GetCursorScreenPos();
+   ImVec2 size=ImGui::GetContentRegionAvail();size.x=std::max(200.0f,size.x);size.y=std::max(180.0f,size.y);
+   ImGui::InvisibleButton("##ShaderCanvas",size,ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight);
+   ImDrawList* draw=ImGui::GetWindowDrawList();
+   draw->AddRectFilled(origin,ImVec2(origin.x+size.x,origin.y+size.y),IM_COL32(28,30,34,255));
+   draw->PushClipRect(origin,ImVec2(origin.x+size.x,origin.y+size.y),true);
+   for(float x=0;x<size.x;x+=24)draw->AddLine(ImVec2(origin.x+x,origin.y),ImVec2(origin.x+x,origin.y+size.y),IM_COL32(48,49,53,130));
+   for(float y=0;y<size.y;y+=24)draw->AddLine(ImVec2(origin.x,origin.y+y),ImVec2(origin.x+size.x,origin.y+y),IM_COL32(48,49,53,130));
+   if(ImGui::IsItemHovered()&&ImGui::IsMouseClicked(ImGuiMouseButton_Right))ImGui::OpenPopup("Add Shader Node");
+   if(ImGui::BeginPopup("Add Shader Node")){
+    for(int type=1;type<8;type++)if(ImGui::MenuItem(nodeTypes[type])){
+     ImVec2 p=ImGui::GetMousePosOnOpeningCurrentPopup();
+     nodes.push_back({nextId++,type,ImVec2(std::max(0.0f,p.x-origin.x),std::max(0.0f,p.y-origin.y)),0.5f,{0.8f,0.8f,0.8f},-1});
+    }
+    ImGui::EndPopup();
+   }
+   auto findNode=[&](int id)->ShaderNode*{for(auto& n:nodes)if(n.id==id)return &n;return nullptr;};
+   for(auto& n:nodes)if(n.input>=0){
+    ShaderNode* source=findNode(n.input);
+    if(source){
+     ImVec2 p1(origin.x+source->pos.x+155,origin.y+source->pos.y+35);
+     ImVec2 p2(origin.x+n.pos.x,origin.y+n.pos.y+35);
+     draw->AddBezierCubic(p1,ImVec2(p1.x+65,p1.y),ImVec2(p2.x-65,p2.y),p2,IM_COL32(242,179,76,255),2.5f);
+    }
+   }
+   for(auto& n:nodes){
+    ImGui::PushID(n.id);
+    const ImVec2 p(origin.x+n.pos.x,origin.y+n.pos.y);
+    const ImVec2 q(p.x+155,p.y+90);
+    draw->AddRectFilled(p,q,IM_COL32(49,51,58,255),5);
+    draw->AddRectFilled(p,ImVec2(q.x,p.y+24),n.type==0?IM_COL32(145,95,44,255):IM_COL32(65,95,125,255),5);
+    draw->AddText(ImVec2(p.x+9,p.y+5),IM_COL32(255,255,255,255),nodeTypes[n.type]);
+    draw->AddCircleFilled(ImVec2(p.x,p.y+35),5,IM_COL32(235,170,80,255));
+    if(n.type!=0)draw->AddCircleFilled(ImVec2(q.x,p.y+35),5,IM_COL32(235,170,80,255));
+    ImGui::SetCursorScreenPos(ImVec2(p.x+6,p.y+4));
+    ImGui::InvisibleButton("move",ImVec2(143,19));
+    if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){
+     ImVec2 d=ImGui::GetIO().MouseDelta;n.pos.x+=d.x;n.pos.y+=d.y;
+    }
+    ImGui::SetCursorScreenPos(ImVec2(p.x-8,p.y+27));
+    ImGui::InvisibleButton("input",ImVec2(18,18));
+    if(ImGui::IsItemClicked()&&linkFrom>=0&&linkFrom!=n.id){n.input=linkFrom;linkFrom=-1;}
+    if(ImGui::IsItemClicked(ImGuiMouseButton_Right))n.input=-1;
+    if(n.type!=0){
+     ImGui::SetCursorScreenPos(ImVec2(q.x-9,p.y+27));
+     ImGui::InvisibleButton("output",ImVec2(18,18));
+     if(ImGui::IsItemClicked())linkFrom=n.id;
+    }
+    if(n.type==2){
+     ImGui::SetCursorScreenPos(ImVec2(p.x+8,p.y+52));
+     ImGui::SetNextItemWidth(136);
+     ImGui::ColorEdit3("##color",n.color,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel);
+    }else if(n.type==3||n.type==4){
+     ImGui::SetCursorScreenPos(ImVec2(p.x+8,p.y+52));
+     ImGui::SetNextItemWidth(136);
+     ImGui::SliderFloat("##value",&n.value,0,1);
+    }else{
+     draw->AddText(ImVec2(p.x+10,p.y+54),IM_COL32(180,185,195,255),n.type==0?"Surface input":"Output");
+    }
+    ImGui::PopID();
+   }
+   if(linkFrom>=0){
+    if(ShaderNode* source=findNode(linkFrom)){
+     ImVec2 p(origin.x+source->pos.x+155,origin.y+source->pos.y+35);
+     draw->AddLine(p,ImGui::GetMousePos(),IM_COL32(255,194,78,255),2);
+    }
+    if(ImGui::IsMouseClicked(ImGuiMouseButton_Right))linkFrom=-1;
+   }
+   draw->PopClipRect();
+   ImGui::SetCursorScreenPos(ImVec2(origin.x,origin.y+size.y));
+   ImGui::TextDisabled("Graph editor prototype: node connections are not yet compiled into GPU PBR shaders.");
+  }
  }
-}
-ImGui::End();
+ ImGui::End();
 }
 // Record only real UI panels, not the pass-through dockspace. This
 // prevents a click on selection-mode radio buttons from also picking
