@@ -1788,7 +1788,6 @@ if(materialsPanelOpen){
   static int nextId=1,connecting=-1;
   static int draggingNode=-1;
   static int editingColorNode=-1;
-  static int editingValueNode=-1;
   static bool draggingWire=false;
   static std::string graphFeedback;
   static bool graphLoaded=false;
@@ -1916,13 +1915,12 @@ if(materialsPanelOpen){
    // otherwise compete with the full-canvas InvisibleButton and steal drags.
    const ImVec2 mouse=ImGui::GetMousePos();
    auto inRect=[&](ImVec2 lo,ImVec2 hi){return mouse.x>=lo.x&&mouse.y>=lo.y&&mouse.x<=hi.x&&mouse.y<=hi.y;};
-   int hoverNode=-1,hoverSocketNode=-1,hoverSocketIndex=-1,hoverOutput=-1,hoverColor=-1,hoverValue=-1;
+   int hoverNode=-1,hoverSocketNode=-1,hoverSocketIndex=-1,hoverOutput=-1,hoverColor=-1;
    for(auto it=nodes.rbegin();it!=nodes.rend();++it){
     auto& n=*it;auto inputs=sockets(n.type);
     ImVec2 p=screen(n.pos),q=screen(ImVec2(n.pos.x+175,n.pos.y+std::max(82.0f,55.0f+22.0f*(float)inputs.size())));
     if(hoverNode<0&&inRect(p,q))hoverNode=n.id;
     if(n.type==2&&hoverColor<0&&inRect(screen(ImVec2(n.pos.x+10,n.pos.y+54)),screen(ImVec2(n.pos.x+160,n.pos.y+78))))hoverColor=n.id;
-    if(n.type==3&&hoverValue<0&&inRect(screen(ImVec2(n.pos.x+10,n.pos.y+54)),screen(ImVec2(n.pos.x+160,n.pos.y+78))))hoverValue=n.id;
     for(int i=0;i<(int)inputs.size();i++){
      ImVec2 sp=socketPos(n,i);
      if(hoverSocketNode<0&&std::abs(mouse.x-sp.x)<11*zoom&&std::abs(mouse.y-sp.y)<11*zoom){
@@ -1934,7 +1932,6 @@ if(materialsPanelOpen){
    }
    if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&hoverNode<0&&hoverSocketNode<0)ImGui::OpenPopup("Add Shader Node");
    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverColor>=0){editingColorNode=hoverColor;ImGui::OpenPopup("Node Color Picker");}
-   else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverValue>=0){editingValueNode=hoverValue;ImGui::OpenPopup("Node Numeric Input");}
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverOutput>=0){connecting=hoverOutput;draggingWire=true;}
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverSocketNode<0&&hoverNode>=0){
     ShaderNode* n=findNode(hoverNode);
@@ -2010,13 +2007,12 @@ if(materialsPanelOpen){
      draw->AddRectFilled(lo,hi,tint,3);
      draw->AddRect(lo,hi,IM_COL32(210,215,220,255),3);
     }else if(n.type==3){
-     // Numeric value entry is handled in an unclipped popup, just like Color.
-     ImVec2 lo=screen(ImVec2(n.pos.x+10,n.pos.y+54));
-     ImVec2 hi=screen(ImVec2(n.pos.x+160,n.pos.y+78));
-     draw->AddRectFilled(lo,hi,IM_COL32(35,39,47,255),3);
-     draw->AddRect(lo,hi,IM_COL32(120,129,145,255),3);
-     char number[48];snprintf(number,sizeof(number),"%.4g",n.value);
-     draw->AddText(ImVec2(lo.x+8*zoom,lo.y+5*zoom),IM_COL32(242,242,245,255),number);
+     // One editable numeric box directly inside the node (no duplicate popup).
+     ImVec2 cp=screen(ImVec2(n.pos.x+10,n.pos.y+54));
+     ImGui::SetCursorScreenPos(cp);
+     ImGui::SetNextItemWidth(150*zoom);
+     ImGui::InputFloat("##NodeValue",&n.value,0.0f,0.0f,"%.4f",ImGuiInputTextFlags_EnterReturnsTrue);
+
     }
     ImGui::PopID();
    }
@@ -2036,16 +2032,6 @@ if(materialsPanelOpen){
      ImGui::Text("Color node #%d",chosen->id);
      ImGui::ColorPicker3("##NodeColorPicker",chosen->color);
      ImGui::ColorEdit3("RGB",chosen->color);
-    }else ImGui::CloseCurrentPopup();
-    ImGui::EndPopup();
-   }
-   if(ImGui::BeginPopup("Node Numeric Input")){
-    ShaderNode* chosen=findNode(editingValueNode);
-    if(chosen&&chosen->type==3){
-     ImGui::Text("Value node #%d",chosen->id);
-     ImGui::SetNextItemWidth(170);
-     ImGui::InputFloat("Value",&chosen->value,0.0f,0.0f,"%.4f");
-     ImGui::TextDisabled("Enter a number and press Enter.");
     }else ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
    }
