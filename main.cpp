@@ -1241,15 +1241,23 @@ for(int oi=0;oi<(int)objects.size();oi++){
   if(!reuseBuffers)disposeGpu(entry);
   entry.vertices=o.vertices;entry.faces=o.faces;
   entry.group=o.smoothingGroup;entry.strength=strength;
-  std::vector<Vector3> averaged(o.vertices.size(),Vector3{});
-  if(strength>0.0f)for(const auto& f:o.faces){
-   if(f.size()<3)continue;
+  // One polygon normal per face. Avoid per-triangle lighting seams on quads.
+  // Smooth only across adjacent faces with compatible directions: cube
+  // corners stay hard while a sphere retains continuous vertex normals.
+  std::vector<Vector3> faceNormals(o.faces.size(),Vector3{});
+  std::vector<std::vector<int>> incident(o.vertices.size());
+  for(size_t fi=0;fi<o.faces.size();fi++){
+   const auto& f=o.faces[fi];if(f.size()<3)continue;
    Vector3 normal{};
-   for(size_t j=1;j+1<f.size();j++)
-    normal=Vector3Add(normal,Vector3CrossProduct(Vector3Subtract(o.vertices[f[j]],o.vertices[f[0]]),Vector3Subtract(o.vertices[f[j+1]],o.vertices[f[0]])));
-   for(int vi:f)if(vi>=0&&vi<(int)averaged.size())averaged[vi]=Vector3Add(averaged[vi],normal);
+   for(size_t j=0;j<f.size();j++){
+    const Vector3 a=o.vertices[f[j]],b=o.vertices[f[(j+1)%f.size()]];
+    normal.x+=(a.y-b.y)*(a.z+b.z);
+    normal.y+=(a.z-b.z)*(a.x+b.x);
+    normal.z+=(a.x-b.x)*(a.y+b.y);
+   }
+   if(Vector3Length(normal)>1e-7f)faceNormals[fi]=Vector3Normalize(normal);
+   for(int vi:f)if(vi>=0&&vi<(int)incident.size())incident[vi].push_back((int)fi);
   }
-  for(auto& n:averaged)if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
   size_t triangleCount=0;
   for(const auto& f:o.faces)if(f.size()>=3)triangleCount+=f.size()-2;
   if(triangleCount>0&&triangleCount<=static_cast<size_t>(INT_MAX/3)&&triangleCount<=static_cast<size_t>(INT_MAX/(9*sizeof(float)))){
@@ -1261,13 +1269,18 @@ for(int oi=0;oi<(int)objects.size();oi++){
    }
    size_t cursor=0;
    const float weight=std::clamp(strength/100.0f,0.0f,1.0f);
-   for(const auto& f:o.faces)if(f.size()>=3)for(size_t j=1;j+1<f.size();j++){
+   for(size_t fi=0;fi<o.faces.size();fi++){const auto& f=o.faces[fi];if(f.size()<3)continue;for(size_t j=1;j+1<f.size();j++){
     const int ids[3]={f[0],f[j],f[j+1]};
     const Vector3 p[3]={o.vertices[ids[0]],o.vertices[ids[1]],o.vertices[ids[2]]};
-    Vector3 flat=Vector3CrossProduct(Vector3Subtract(p[1],p[0]),Vector3Subtract(p[2],p[0]));
-    if(Vector3Length(flat)>1e-7f)flat=Vector3Normalize(flat);
+    const Vector3 flat=faceNormals[fi];
     for(int k=0;k<3;k++){
-     Vector3 n=Vector3Add(Vector3Scale(flat,1.0f-weight),Vector3Scale(averaged[ids[k]],weight));
+     Vector3 smooth{};
+     for(int adjacent:incident[ids[k]])
+      if(Vector3DotProduct(flat,faceNormals[adjacent])>0.75f)
+       smooth=Vector3Add(smooth,faceNormals[adjacent]);
+     if(Vector3Length(smooth)>1e-7f)smooth=Vector3Normalize(smooth);
+     else smooth=flat;
+     Vector3 n=Vector3Add(Vector3Scale(flat,1.0f-weight),Vector3Scale(smooth,weight));
      if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
      entry.mesh.vertices[cursor]=p[k].x;
      entry.mesh.normals[cursor++]=n.x;
@@ -1276,6 +1289,7 @@ for(int oi=0;oi<(int)objects.size();oi++){
      entry.mesh.vertices[cursor]=p[k].z;
      entry.mesh.normals[cursor++]=n.z;
     }
+   }
    }
    if(reuseBuffers){
     UpdateMeshBuffer(entry.mesh,0,entry.mesh.vertices,(int)(triangleCount*9*sizeof(float)),0);
