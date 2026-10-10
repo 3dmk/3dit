@@ -638,8 +638,11 @@ int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode
  if(tool==1||tool==3)for(int h=3;h<=5;h++){
   Vector2 center=GetWorldToScreen(planeHandlePoint(p,h,gizmoSize),camera);
   float d=Vector2Distance(mouse,center);
-  if(d<18.0f&&d<distance){distance=d;best=h;}
+  if(d<13.0f&&d<distance){distance=d;best=h;}
  }
+ // A plane handle is a deliberate two-axis constraint; do not let the
+ // adjacent axis shafts steal the click after the plane has been picked.
+ if(best>=3)return best;
  for(int i=0;i<3;i++){
   if(tool==2){
    Vector3 u=i==0?Vector3{0,1,0}:Vector3{1,0,0};
@@ -713,8 +716,10 @@ void applyDrag(){if(!drag.active||selected<0)return;auto& o=objects[selected];
    else for(int i:drag.affected)if(i>=0&&i<(int)o.vertices.size())
     o.vertices[i]=Vector3Add(drag.startVertices[i],shift);
   }else{
-   const float ka=std::max(0.05f,1.0f+da);
-   const float kb=std::max(0.05f,1.0f+db);
+   // Plane scale is a locked two-axis constraint: preserve the proportions
+   // within XY, XZ or YZ while leaving the third axis untouched.
+   const float k=std::max(0.05f,1.0f+(da+db)*0.5f);
+   const float ka=k,kb=k;
    if(mode==0){
     for(auto& v:o.vertices){(&v.x)[a]*=ka;(&v.x)[b]*=kb;}
    }else{
