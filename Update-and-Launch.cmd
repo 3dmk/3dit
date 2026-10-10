@@ -25,9 +25,9 @@ set "N3D_PROGRESS=%N3D_SIGNAL%.progress"
 call :progress 5 "Checking project tools..."
 if exist "N3DLite-Splash.ps1" (
  start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%CD%\N3DLite-Splash.ps1" -SignalFile "%N3D_SIGNAL%" -ProgressFile "%N3D_PROGRESS%"
- rem Minimize the updater console after the splash process is started.
- rem The console is restored automatically if an update/build fails.
- call :minimize_console
+ rem Keep the updater console visible so slow configuration/build stages
+ rem and any errors cannot be hidden behind the splash window.
+ echo N3DLite update console remains visible for diagnostics.
 )
 echo === N3DLite Update and Launch ===
 echo Project: %CD%
