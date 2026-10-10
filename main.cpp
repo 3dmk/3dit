@@ -17,6 +17,51 @@ void ApplyN3DLiteTitlebarTheme();
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
+// Live node graph preview state is independent from the ImGui panel lifetime.
+struct PbrGraphNode {int id;int type;ImVec2 pos;float value=0.5f;float color[3]={0.8f,0.8f,0.8f};};
+struct PbrGraphLink {int from;int to;int socket;};
+static std::vector<PbrGraphNode> pbrNodes;
+static std::vector<PbrGraphLink> pbrLinks;
+static bool pbrEnabled=false;
+static int pbrMaterialId=-1;
+static void EvaluatePbrGraph(){
+ if(!pbrEnabled||pbrMaterialId<0||pbrMaterialId>=(int)materials.size())return;
+ auto& mat=materials[pbrMaterialId];
+ auto nodeById=[&](int id)->const PbrGraphNode*{
+  for(const auto& n:pbrNodes)if(n.id==id)return &n;
+  return nullptr;
+ };
+ auto linkAt=[&](int id,int socket)->const PbrGraphLink*{
+  for(const auto& l:pbrLinks)if(l.to==id&&l.socket==socket)return &l;
+  return nullptr;
+ };
+ auto eval=[&](auto&& self,int id,int depth)->float{
+  if(depth>64)return 0.0f;
+  const auto* n=nodeById(id);if(!n)return 0.0f;
+  if(n->type==2)return (n->color[0]+n->color[1]+n->color[2])/3.0f;
+  if(n->type==3)return n->value;
+  if(n->type==7||n->type==9||n->type==10){
+   auto get=[&](int socket){auto* l=linkAt(id,socket);return l?self(self,l->from,depth+1):n->value;};
+   float a=get(0),b=get(1);
+   return n->type==9?a*b:n->type==10?a+b:(a+b)*0.5f;
+  }
+  return n->value;
+ };
+ for(const auto& n:pbrNodes)if(n.type==0){
+  for(const auto& l:pbrLinks)if(l.to==n.id){
+   const auto* src=nodeById(l.from);if(!src)continue;
+   if(l.socket==0&&src->type==2){
+    for(int c=0;c<3;c++)mat.baseColor[c]=std::clamp(src->color[c],0.0f,1.0f);
+   }else if(l.socket==0){
+    float v=std::clamp(eval(eval,l.from,0),0.0f,1.0f);
+    for(float& c:mat.baseColor)c=v;
+   }else if(l.socket==1)mat.metallic=std::clamp(eval(eval,l.from,0),0.0f,1.0f);
+   else if(l.socket==2)mat.roughness=std::clamp(eval(eval,l.from,0),0.0f,1.0f);
+  }
+  break;
+ }
+}
+
 Color meshMaterialColor(const MeshObject& o){
  const int id=std::clamp(o.materialId,0,(int)materials.size()-1);
  const auto& c=materials[id].baseColor;
@@ -1724,17 +1769,17 @@ ImGui::End();
 if(materialsPanelOpen){
  ImGui::SetNextWindowSize(ImVec2(900,600),ImGuiCond_FirstUseEver);
  if(ImGui::Begin("Materials",&materialsPanelOpen)){
-  struct ShaderNode {int id;int type;ImVec2 pos;float value=0.5f;float color[3]={0.8f,0.8f,0.8f};};
-  struct ShaderLink {int from;int to;int socket;};
-  static std::vector<ShaderNode> nodes;
-  static std::vector<ShaderLink> links;
+  using ShaderNode=PbrGraphNode;
+  using ShaderLink=PbrGraphLink;
+  auto& nodes=pbrNodes;
+  auto& links=pbrLinks;
   static int nextId=1,connecting=-1;
   static int draggingNode=-1;
   static int editingColorNode=-1;
   static bool draggingWire=false;
   static std::string graphFeedback;
   static bool graphLoaded=false;
-  static bool hasPbr=false;
+  bool& hasPbr=pbrEnabled;
   static ImVec2 pan(0,0);
   static float zoom=1.0f;
   const char* nodeTypes[]={"PBR_Shader","Image Texture","Color","Value","Noise","Normal Map","Mix","Math","UV Map","Multiply","Add","Fresnel","Emission","AO","Separate RGB","Combine RGB"};
@@ -1792,7 +1837,13 @@ if(materialsPanelOpen){
    ImGui::TextDisabled("Empty graph. Add a PBR_Shader to begin.");
   }else{
    if(ImGui::Button("Assign to Selected")&&selected>=0&&selected<(int)objects.size()){
-    checkpoint();objects[selected].materialId=activeMaterial;
+    checkpoint();
+    if(pbrMaterialId<0||pbrMaterialId>=(int)materials.size()){
+     EditorMaterial m;m.name="PBR Shader";materials.push_back(m);pbrMaterialId=(int)materials.size()-1;
+    }
+    activeMaterial=pbrMaterialId;
+    objects[selected].materialId=pbrMaterialId;
+    EvaluatePbrGraph();
    }
    ImGui::SameLine();
    if(ImGui::Button("Save Graph"))saveGraph();
@@ -1807,6 +1858,7 @@ if(materialsPanelOpen){
     ImGui::EndPopup();
    }
    if(!graphFeedback.empty())ImGui::TextDisabled("%s",graphFeedback.c_str());
+   if(pbrMaterialId<0)ImGui::TextDisabled("Assign to Selected to enable viewport material preview.");
    ImGui::TextDisabled("Right-click empty canvas: add node | drag header: move | middle-drag: pan | wheel: zoom | click sockets: connect | right-click input: unlink");
    ImVec2 origin=ImGui::GetCursorScreenPos();
    ImVec2 area=ImGui::GetContentRegionAvail();area.x=std::max(250.0f,area.x);area.y=std::max(200.0f,area.y-22);
@@ -1968,7 +2020,8 @@ if(materialsPanelOpen){
     ImGui::EndPopup();
    }
    ImGui::SetCursorScreenPos(ImVec2(origin.x,origin.y+area.y));
-   ImGui::TextDisabled("%d nodes | %d links | %.0f%% zoom | Graph editing only; GPU PBR compilation pending",(int)nodes.size(),(int)links.size(),zoom*100.0f);
+   EvaluatePbrGraph();
+   ImGui::TextDisabled("%d nodes | %d links | %.0f%% zoom | Base Color/Roughness/Metallic live viewport preview; full PBR pending",(int)nodes.size(),(int)links.size(),zoom*100.0f);
   }
  }
  ImGui::End();
