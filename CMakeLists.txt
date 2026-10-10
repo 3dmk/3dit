@@ -17,7 +17,7 @@ add_library(coremodel_imgui STATIC
   ${rlimgui_SOURCE_DIR}/rlImGui.cpp)
 target_include_directories(coremodel_imgui PUBLIC ${imgui_SOURCE_DIR} ${rlimgui_SOURCE_DIR})
 target_link_libraries(coremodel_imgui PUBLIC raylib)
-add_executable(N3DLite main.cpp)
+add_executable(N3DLite main.cpp native_titlebar.cpp)
 target_link_libraries(N3DLite PRIVATE raylib coremodel_imgui)
 
 # Download the open-source Roboto font during configuration; fallback to raylib font offline.
