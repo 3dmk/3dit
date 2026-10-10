@@ -1134,28 +1134,29 @@ for(int g=-20;g<=20;g++){
  DrawLine3D({-20,(float)g,0},{20,(float)g,0},c);
 }
 // Ground axes use the neutral grid palette; reserve RGB for transform gizmos.
-// Smooth groups: 0 = flat, positive group = average normals at shared vertices.
-// This editor currently assigns one group to the entire object.
-// Apply only to mesh faces; overlays and gizmos remain double-sided.
+// Two-pass mesh rendering: one shader activation per object, then wireframe.
+// No shader switching per polygon; normal accumulation is linear in face count.
 rlDrawRenderBatchActive();
 if(backfaceCulling)rlEnableBackfaceCulling();
 else rlDisableBackfaceCulling();
 for(int oi=0;oi<(int)objects.size();oi++){
- auto& o=objects[oi];
- std::vector<Vector3> smooth(o.vertices.size(),Vector3{0,0,0});
- if(o.smoothingGroup>0){
+ const auto& o=objects[oi];
+ const bool smoothEnabled=o.smoothingGroup>0&&o.smoothingValues[o.smoothingGroup]>0.0f;
+ const bool pixel=smoothShaderReady&&smoothEnabled;
+ std::vector<Vector3> smooth;
+ if(smoothEnabled){
+  smooth.assign(o.vertices.size(),Vector3{0,0,0});
   for(const auto& f:o.faces){
    if(f.size()<3)continue;
-   Vector3 normal{};
+   Vector3 n{};
    for(size_t j=1;j+1<f.size();j++)
-    normal=Vector3Add(normal,Vector3CrossProduct(Vector3Subtract(o.vertices[f[j]],o.vertices[f[0]]),Vector3Subtract(o.vertices[f[j+1]],o.vertices[f[0]])));
-   for(int vi:f)if(vi>=0&&vi<(int)smooth.size())smooth[vi]=Vector3Add(smooth[vi],normal);
+    n=Vector3Add(n,Vector3CrossProduct(Vector3Subtract(o.vertices[f[j]],o.vertices[f[0]]),Vector3Subtract(o.vertices[f[j+1]],o.vertices[f[0]])));
+   for(int vi:f)if(vi>=0&&vi<(int)smooth.size())smooth[vi]=Vector3Add(smooth[vi],n);
   }
   for(auto& n:smooth)if(Vector3Length(n)>1e-7f)n=Vector3Normalize(n);
  }
- const bool pixel=smoothShaderReady&&o.smoothingGroup>0&&o.smoothingValues[o.smoothingGroup]>0;
  if(pixel){
-  const EditorMaterial& mat=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
+  const auto& mat=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
   SetShaderValue(smoothShader,locBase,mat.baseColor,SHADER_UNIFORM_VEC3);
   SetShaderValue(smoothShader,locRough,&mat.roughness,SHADER_UNIFORM_FLOAT);
   SetShaderValue(smoothShader,locMetal,&mat.metallic,SHADER_UNIFORM_FLOAT);
@@ -1167,34 +1168,43 @@ for(int oi=0;oi<(int)objects.size();oi++){
  for(int fi=0;fi<(int)o.faces.size();fi++){
   const auto& f=o.faces[fi];
   if(f.size()<3)continue;
-  bool highlighted=oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0));
+  const bool highlighted=oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0));
+  if(highlighted)continue; // Draw selection after the material pass.
+  const bool smoothTriangle=smoothEnabled;
+  if(smoothTriangle)rlBegin(RL_TRIANGLES);
   for(size_t j=1;j+1<f.size();j++){
-   int ids[3]={f[0],f[j],f[j+1]};
-   Vector3 a=world(o,ids[0]),b=world(o,ids[1]),c=world(o,ids[2]);
-   if(highlighted||o.smoothingGroup==0||o.smoothingValues[o.smoothingGroup]<=0.0f){
-    Color color=highlighted?Color{215,45,50,255}:shadeMaterialTriangle(o,a,b,c,camera.position);
-    DrawTriangle3D(a,b,c,color);
-   }else{
-    Vector3 p[3]={a,b,c};
-    rlBegin(RL_TRIANGLES);
-    for(int k=0;k<3;k++){
-     Vector3 flat=Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
-     if(Vector3Length(flat)>1e-7f)flat=Vector3Normalize(flat);
-     const float weight=std::clamp(o.smoothingValues[o.smoothingGroup]/100.0f,0.0f,1.0f);
-     Vector3 blended=Vector3Add(Vector3Scale(flat,1.0f-weight),Vector3Scale(smooth[ids[k]],weight));
-     if(pixel){rlColor4ub(255,255,255,255);rlNormal3f(blended.x,blended.y,blended.z);}
-     else {Color color=shadeMaterialTriangle(o,p[k],p[(k+1)%3],p[(k+2)%3],camera.position,blended);rlColor4ub(color.r,color.g,color.b,color.a);}
-     rlVertex3f(p[k].x,p[k].y,p[k].z);
+   const int ids[3]={f[0],f[j],f[j+1]};
+   const Vector3 p[3]={world(o,ids[0]),world(o,ids[1]),world(o,ids[2])};
+   if(!smoothTriangle){
+    DrawTriangle3D(p[0],p[1],p[2],shadeMaterialTriangle(o,p[0],p[1],p[2],camera.position));
+    continue;
+   }
+   Vector3 flat=Vector3CrossProduct(Vector3Subtract(p[1],p[0]),Vector3Subtract(p[2],p[0]));
+   if(Vector3Length(flat)>1e-7f)flat=Vector3Normalize(flat);
+   const float weight=std::clamp(o.smoothingValues[o.smoothingGroup]/100.0f,0.0f,1.0f);
+   for(int k=0;k<3;k++){
+    Vector3 blended=Vector3Add(Vector3Scale(flat,1.0f-weight),Vector3Scale(smooth[ids[k]],weight));
+    if(pixel){rlColor4ub(255,255,255,255);rlNormal3f(blended.x,blended.y,blended.z);}
+    else {
+     Color c=shadeMaterialTriangle(o,p[k],p[(k+1)%3],p[(k+2)%3],camera.position,blended);
+     rlColor4ub(c.r,c.g,c.b,c.a);
     }
-    rlEnd();
+    rlVertex3f(p[k].x,p[k].y,p[k].z);
    }
   }
-  if(pixel)EndShaderMode();
-  for(size_t j=0;j<f.size();j++)
-   DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:Color{78,82,88,255});
-  if(pixel)BeginShaderMode(smoothShader);
+  if(smoothTriangle)rlEnd();
  }
  if(pixel)EndShaderMode();
+ // Selection and topology overlays are never processed by the material shader.
+ for(int fi=0;fi<(int)o.faces.size();fi++){
+  const auto& f=o.faces[fi];
+  if(f.size()<3)continue;
+  const bool highlighted=oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0));
+  if(highlighted)for(size_t j=1;j+1<f.size();j++)
+   DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),Color{215,45,50,255});
+  for(size_t j=0;j<f.size();j++)
+   DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:Color{78,82,88,255});
+ }
 }
 rlDrawRenderBatchActive();
 rlDisableBackfaceCulling();
