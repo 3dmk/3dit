@@ -35,28 +35,40 @@ static void EvaluatePbrGraph(){
   for(const auto& l:pbrLinks)if(l.to==id&&l.socket==socket)return &l;
   return nullptr;
  };
- auto eval=[&](auto&& self,int id,int depth)->float{
-  if(depth>64)return 0.0f;
-  const auto* n=nodeById(id);if(!n)return 0.0f;
-  if(n->type==2)return (n->color[0]+n->color[1]+n->color[2])/3.0f;
-  if(n->type==3)return n->value;
-  if(n->type==7||n->type==9||n->type==10){
-   auto get=[&](int socket){auto* l=linkAt(id,socket);return l?self(self,l->from,depth+1):n->value;};
-   float a=get(0),b=get(1);
-   return n->type==9?a*b:n->type==10?a+b:(a+b)*0.5f;
+ // Evaluate all graph values as RGB vectors. Scalars broadcast to all channels.
+ // This preserves color when combining a Color node with a Value node.
+ auto eval=[&](auto&& self,int id,int depth)->Vector3{
+  if(depth>64)return {0,0,0};
+  const auto* n=nodeById(id);if(!n)return {0,0,0};
+  if(n->type==2)return {n->color[0],n->color[1],n->color[2]};
+  if(n->type==3)return {n->value,n->value,n->value};
+  auto get=[&](int socket,float fallback)->Vector3{
+   const auto* l=linkAt(id,socket);
+   return l?self(self,l->from,depth+1):Vector3{fallback,fallback,fallback};
+  };
+  if(n->type==7||n->type==9||n->type==10||n->type==6){
+   Vector3 x=get(0,n->value),y=get(1,n->value);
+   if(n->type==9)return {x.x*y.x,x.y*y.y,x.z*y.z};
+   if(n->type==10)return {x.x+y.x,x.y+y.y,x.z+y.z};
+   if(n->type==6){
+    Vector3 factor=get(2,0.5f);
+    float t=std::clamp(factor.x,0.0f,1.0f);
+    return {x.x+(y.x-x.x)*t,x.y+(y.y-x.y)*t,x.z+(y.z-x.z)*t};
+   }
+   return {(x.x+y.x)*0.5f,(x.y+y.y)*0.5f,(x.z+y.z)*0.5f};
   }
-  return n->value;
+  return {n->value,n->value,n->value};
  };
  for(const auto& n:pbrNodes)if(n.type==0){
   for(const auto& l:pbrLinks)if(l.to==n.id){
-   const auto* src=nodeById(l.from);if(!src)continue;
-   if(l.socket==0&&src->type==2){
-    for(int c=0;c<3;c++)mat.baseColor[c]=std::clamp(src->color[c],0.0f,1.0f);
-   }else if(l.socket==0){
-    float v=std::clamp(eval(eval,l.from,0),0.0f,1.0f);
-    for(float& c:mat.baseColor)c=v;
-   }else if(l.socket==1)mat.metallic=std::clamp(eval(eval,l.from,0),0.0f,1.0f);
-   else if(l.socket==2)mat.roughness=std::clamp(eval(eval,l.from,0),0.0f,1.0f);
+   if(!nodeById(l.from))continue;
+   Vector3 v=eval(eval,l.from,0);
+   if(l.socket==0){
+    mat.baseColor[0]=std::clamp(v.x,0.0f,1.0f);
+    mat.baseColor[1]=std::clamp(v.y,0.0f,1.0f);
+    mat.baseColor[2]=std::clamp(v.z,0.0f,1.0f);
+   }else if(l.socket==1)mat.metallic=std::clamp(v.x,0.0f,1.0f);
+   else if(l.socket==2)mat.roughness=std::clamp(v.x,0.0f,1.0f);
   }
   break;
  }
@@ -1951,12 +1963,13 @@ if(materialsPanelOpen){
      if(hoverSocketNode==n.id&&hoverSocketIndex==i&&connecting>=0&&connecting!=n.id&&((draggingWire&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))||(!draggingWire&&ImGui::IsMouseClicked(ImGuiMouseButton_Left)))){
       ShaderNode* source=findNode(connecting);
       // Socket categories: 0 scalar, 1 color, 2 vector, 3 normal.
-      auto outputKind=[](int t){switch(t){case 1:case 2:case 6:case 12:case 15:return 1;case 5:return 3;case 8:return 2;default:return 0;}};
+      auto outputKind=[](int t){switch(t){case 1:case 2:case 6:case 7:case 9:case 10:case 12:case 15:return 1;case 5:return 3;case 8:return 2;default:return 0;}};
       auto inputKind=[&](int t,int slot){
        if(t==0){if(slot==0||slot==5)return 1;if(slot==3)return 3;return 0;}
        if(t==5)return slot==0?1:0;
        if(t==1)return 2;
        if(t==6)return slot<2?1:0;
+       if(t==7||t==9||t==10)return 1;
        if(t==12)return slot==0?1:0;
        if(t==14)return 1;
        return 0;
