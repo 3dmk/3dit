@@ -1729,6 +1729,8 @@ if(materialsPanelOpen){
   static std::vector<ShaderNode> nodes;
   static std::vector<ShaderLink> links;
   static int nextId=1,connecting=-1;
+  static int draggingNode=-1;
+  static bool draggingWire=false;
   static std::string graphFeedback;
   static bool graphLoaded=false;
   static bool hasPbr=false;
@@ -1809,6 +1811,7 @@ if(materialsPanelOpen){
    ImVec2 area=ImGui::GetContentRegionAvail();area.x=std::max(250.0f,area.x);area.y=std::max(200.0f,area.y-22);
    ImGui::InvisibleButton("##ShaderCanvas",area,ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight|ImGuiButtonFlags_MouseButtonMiddle);
    bool canvasHover=ImGui::IsItemHovered();
+   // Node widgets are overlaid after the canvas; canvas hover is background-only.
    if(canvasHover&&ImGui::IsMouseDragging(ImGuiMouseButton_Middle)){
     pan.x+=ImGui::GetIO().MouseDelta.x;pan.y+=ImGui::GetIO().MouseDelta.y;
    }
@@ -1827,7 +1830,7 @@ if(materialsPanelOpen){
    for(float y=std::fmod(pan.y,grid);y<area.y;y+=grid)draw->AddLine(ImVec2(origin.x,origin.y+y),ImVec2(end.x,origin.y+y),IM_COL32(56,59,65,110));
    auto screen=[&](ImVec2 p){return ImVec2(origin.x+pan.x+p.x*zoom,origin.y+pan.y+p.y*zoom);};
    auto findNode=[&](int id)->ShaderNode*{for(auto& n:nodes)if(n.id==id)return &n;return nullptr;};
-   if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right))ImGui::OpenPopup("Add Shader Node");
+   // Context menu is opened after node hit-testing so right-clicking a socket does not add a node.
    if(ImGui::BeginPopup("Add Shader Node")){
     ImVec2 mouse=ImGui::GetMousePosOnOpeningCurrentPopup();
     for(int type=1;type<16;type++)if(ImGui::MenuItem(nodeTypes[type])){
@@ -1843,6 +1846,38 @@ if(materialsPanelOpen){
     ImVec2 p2=socketPos(*to,link.socket);
     draw->AddBezierCubic(p1,ImVec2(p1.x+65*zoom,p1.y),ImVec2(p2.x-65*zoom,p2.y),p2,IM_COL32(232,169,73,255),2.3f);
    }
+   // Resolve interaction directly in canvas coordinates. ImGui overlay widgets
+   // otherwise compete with the full-canvas InvisibleButton and steal drags.
+   const ImVec2 mouse=ImGui::GetMousePos();
+   auto inRect=[&](ImVec2 lo,ImVec2 hi){return mouse.x>=lo.x&&mouse.y>=lo.y&&mouse.x<=hi.x&&mouse.y<=hi.y;};
+   int hoverNode=-1,hoverSocketNode=-1,hoverSocketIndex=-1,hoverOutput=-1;
+   for(auto it=nodes.rbegin();it!=nodes.rend();++it){
+    auto& n=*it;auto inputs=sockets(n.type);
+    ImVec2 p=screen(n.pos),q=screen(ImVec2(n.pos.x+175,n.pos.y+std::max(82.0f,55.0f+22.0f*(float)inputs.size())));
+    if(hoverNode<0&&inRect(p,q))hoverNode=n.id;
+    for(int i=0;i<(int)inputs.size();i++){
+     ImVec2 sp=socketPos(n,i);
+     if(hoverSocketNode<0&&std::abs(mouse.x-sp.x)<11*zoom&&std::abs(mouse.y-sp.y)<11*zoom){
+      hoverSocketNode=n.id;hoverSocketIndex=i;
+     }
+    }
+    ImVec2 op=screen(ImVec2(n.pos.x+175,n.pos.y+39));
+    if(n.type!=0&&hoverOutput<0&&std::abs(mouse.x-op.x)<11*zoom&&std::abs(mouse.y-op.y)<11*zoom)hoverOutput=n.id;
+   }
+   if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&hoverNode<0&&hoverSocketNode<0)ImGui::OpenPopup("Add Shader Node");
+   if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverOutput>=0){connecting=hoverOutput;draggingWire=true;}
+   else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverSocketNode<0&&hoverNode>=0){
+    ShaderNode* n=findNode(hoverNode);
+    ImVec2 p=screen(n->pos);
+    if(inRect(p,ImVec2(p.x+175*zoom,p.y+25*zoom)))draggingNode=hoverNode;
+   }
+   if(draggingNode>=0){
+    if(ImGui::IsMouseDown(ImGuiMouseButton_Left)){
+     if(ShaderNode* n=findNode(draggingNode)){
+      n->pos.x+=ImGui::GetIO().MouseDelta.x/zoom;n->pos.y+=ImGui::GetIO().MouseDelta.y/zoom;
+     }
+    }else draggingNode=-1;
+   }
    for(auto& n:nodes){
     ImGui::PushID(n.id);
     const auto inputs=sockets(n.type);
@@ -1851,21 +1886,14 @@ if(materialsPanelOpen){
     draw->AddRectFilled(p,q,IM_COL32(47,50,58,255),5);
     draw->AddRectFilled(p,ImVec2(q.x,p.y+25*zoom),n.type==0?IM_COL32(147,96,42,255):IM_COL32(63,94,127,255),5);
     draw->AddText(ImVec2(p.x+9*zoom,p.y+6*zoom),IM_COL32(255,255,255,255),nodeTypes[n.type]);
-    ImGui::SetCursorScreenPos(ImVec2(p.x+4,p.y+2));
-    ImGui::InvisibleButton("header",ImVec2(167*zoom,22*zoom));
-    if(ImGui::IsItemActive()&&ImGui::IsMouseDragging(ImGuiMouseButton_Left)){
-     n.pos.x+=ImGui::GetIO().MouseDelta.x/zoom;
-     n.pos.y+=ImGui::GetIO().MouseDelta.y/zoom;
-    }
+    // Header drag is handled by canvas hit-testing, not overlapping widgets.
     for(int i=0;i<(int)inputs.size();i++){
      ImVec2 sp=socketPos(n,i);
      draw->AddCircleFilled(sp,5*zoom,IM_COL32(233,171,77,255));
      draw->AddText(ImVec2(sp.x+10*zoom,sp.y-6*zoom),IM_COL32(210,214,221,255),inputs[i]);
-     ImGui::SetCursorScreenPos(ImVec2(sp.x-9*zoom,sp.y-9*zoom));
-     ImGui::PushID(i);ImGui::InvisibleButton("in",ImVec2(18*zoom,18*zoom));
-     if(ImGui::IsItemClicked(ImGuiMouseButton_Right))
+     if(hoverSocketNode==n.id&&hoverSocketIndex==i&&ImGui::IsMouseClicked(ImGuiMouseButton_Right))
       links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.to==n.id&&l.socket==i;}),links.end());
-     if(ImGui::IsItemClicked(ImGuiMouseButton_Left)&&connecting>=0&&connecting!=n.id){
+     if(hoverSocketNode==n.id&&hoverSocketIndex==i&&connecting>=0&&connecting!=n.id&&((draggingWire&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))||(!draggingWire&&ImGui::IsMouseClicked(ImGuiMouseButton_Left)))){
       ShaderNode* source=findNode(connecting);
       // Socket categories: 0 scalar, 1 color, 2 vector, 3 normal.
       auto outputKind=[](int t){switch(t){case 1:case 2:case 6:case 12:case 15:return 1;case 5:return 3;case 8:return 2;default:return 0;}};
@@ -1896,16 +1924,13 @@ if(materialsPanelOpen){
        links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.to==n.id&&l.socket==i;}),links.end());
        links.push_back({connecting,n.id,i});graphFeedback="Connected";
       }
-      connecting=-1;
+      connecting=-1;draggingWire=false;
      }
-     ImGui::PopID();
     }
     if(n.type!=0){
      ImVec2 op=screen(ImVec2(n.pos.x+175,n.pos.y+39));
      draw->AddCircleFilled(op,5*zoom,IM_COL32(233,171,77,255));
-     ImGui::SetCursorScreenPos(ImVec2(op.x-9*zoom,op.y-9*zoom));
-     ImGui::InvisibleButton("out",ImVec2(18*zoom,18*zoom));
-     if(ImGui::IsItemClicked())connecting=n.id;
+     // Output socket starts a drag wire or a two-click connection.
     }
     if(n.type==2||n.type==3){
      ImVec2 cp=screen(ImVec2(n.pos.x+10,n.pos.y+56));
@@ -1915,12 +1940,13 @@ if(materialsPanelOpen){
     }
     ImGui::PopID();
    }
+   if(draggingWire&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))draggingWire=false;
    if(connecting>=0){
     if(ShaderNode* source=findNode(connecting)){
      ImVec2 p=screen(ImVec2(source->pos.x+175,source->pos.y+39));
      draw->AddBezierCubic(p,ImVec2(p.x+60*zoom,p.y),ImGui::GetMousePos(),ImGui::GetMousePos(),IM_COL32(255,192,73,255),2.0f);
     }
-    if(ImGui::IsKeyPressed(ImGuiKey_Escape))connecting=-1;
+    if(ImGui::IsKeyPressed(ImGuiKey_Escape)){connecting=-1;draggingWire=false;}
    }
    draw->PopClipRect();
    ImGui::SetCursorScreenPos(ImVec2(origin.x,origin.y+area.y));
