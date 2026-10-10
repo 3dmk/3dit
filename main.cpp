@@ -1341,8 +1341,8 @@ if(selected>=0&&selected<(int)objects.size()){
   const Vector3 directions[3]={{1,0,0},{0,1,0},{0,0,1}};
   const Color colors[3]={RED,GREEN,BLUE};
   if(tool==1||tool==3){
-   // Smaller corner handles, using the blended colors of their two axes.
-   const Color planeColors[3]={{225,205,65,190},{190,85,215,190},{65,195,205,190}};
+   // Use the same neutral color for every plane constraint square.
+   const Color planeColors[3]={{190,190,190,190},{190,190,190,190},{190,190,190,190}};
    for(int h=3;h<=5;h++){
     const int a=h==3?0:h==4?0:1,b=h==3?1:2;
     Vector3 u{},v{};(&u.x)[a]=1;(&v.x)[b]=1;
