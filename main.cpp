@@ -1168,7 +1168,13 @@ for(int oi=0;oi<(int)objects.size();oi++){
   if(a.x!=b.x||a.y!=b.y||a.z!=b.z){dirty=true;break;}
  }
  if(dirty){
-  disposeGpu(entry);
+  // Preserve the existing GPU allocation when the triangle count is unchanged.
+  // This avoids destroying/recreating VAOs and VBOs during vertex drags.
+  size_t requiredTriangles=0;
+  for(const auto& f:o.faces)if(f.size()>=3)requiredTriangles+=f.size()-2;
+  const bool reuseBuffers=entry.uploaded&&entry.mesh.triangleCount==(int)requiredTriangles&&
+                          entry.mesh.vertices&&entry.mesh.normals;
+  if(!reuseBuffers)disposeGpu(entry);
   entry.vertices=o.vertices;entry.faces=o.faces;
   entry.group=o.smoothingGroup;entry.strength=strength;
   std::vector<Vector3> averaged(o.vertices.size(),Vector3{});
@@ -1183,10 +1189,12 @@ for(int oi=0;oi<(int)objects.size();oi++){
   size_t triangleCount=0;
   for(const auto& f:o.faces)if(f.size()>=3)triangleCount+=f.size()-2;
   if(triangleCount>0&&triangleCount<=static_cast<size_t>(INT_MAX/3)){
-   entry.mesh.vertexCount=(int)(triangleCount*3);
-   entry.mesh.triangleCount=(int)triangleCount;
-   entry.mesh.vertices=(float*)MemAlloc(triangleCount*9*sizeof(float));
-   entry.mesh.normals=(float*)MemAlloc(triangleCount*9*sizeof(float));
+   if(!reuseBuffers){
+    entry.mesh.vertexCount=(int)(triangleCount*3);
+    entry.mesh.triangleCount=(int)triangleCount;
+    entry.mesh.vertices=(float*)MemAlloc(triangleCount*9*sizeof(float));
+    entry.mesh.normals=(float*)MemAlloc(triangleCount*9*sizeof(float));
+   }
    size_t cursor=0;
    const float weight=std::clamp(strength/100.0f,0.0f,1.0f);
    for(const auto& f:o.faces)if(f.size()>=3)for(size_t j=1;j+1<f.size();j++){
@@ -1205,8 +1213,13 @@ for(int oi=0;oi<(int)objects.size();oi++){
      entry.mesh.normals[cursor++]=n.z;
     }
    }
-   UploadMesh(&entry.mesh,false);
-   entry.uploaded=entry.mesh.vaoId!=0;
+   if(reuseBuffers){
+    UpdateMeshBuffer(entry.mesh,0,entry.mesh.vertices,(int)(triangleCount*9*sizeof(float)),0);
+    UpdateMeshBuffer(entry.mesh,2,entry.mesh.normals,(int)(triangleCount*9*sizeof(float)),0);
+   }else{
+    UploadMesh(&entry.mesh,true);
+    entry.uploaded=entry.mesh.vaoId!=0;
+   }
   }
  }
  if(entry.uploaded){
