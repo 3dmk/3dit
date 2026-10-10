@@ -1323,7 +1323,10 @@ if(selected>=0&&selected<(int)objects.size()){
  auto& o=objects[selected];
  rlDrawRenderBatchActive();
  rlDisableDepthTest();
- Vector3 p=pivot(o);if(mode==0||!active(o).empty()){if(tool==2){
+ Vector3 p=pivot(o);
+ const int highlightedHandle=drag.active?drag.axis:(inView?handleHit(GetMousePosition()):-1);
+ const Color gizmoHighlight={255,176,36,255};
+ if(mode==0||!active(o).empty()){if(tool==2){
   // Rotate: three independent axis-aligned circular rings.
   const Color colors[3]={RED,GREEN,BLUE};
   for(int axis=0;axis<3;axis++){
@@ -1334,7 +1337,7 @@ if(selected>=0&&selected<(int)objects.size()){
     float t0=6.2831853f*j/64.0f,t1=6.2831853f*(j+1)/64.0f;
     Vector3 q0=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t0)),Vector3Scale(v,sinf(t0))),1.35f*gizmoSize));
     Vector3 q1=Vector3Add(p,Vector3Scale(Vector3Add(Vector3Scale(u,cosf(t1)),Vector3Scale(v,sinf(t1))),1.35f*gizmoSize));
-    DrawLine3D(q0,q1,colors[axis]);
+    DrawLine3D(q0,q1,highlightedHandle==axis?gizmoHighlight:colors[axis]);
    }
   }
  }else{
@@ -1352,25 +1355,27 @@ if(selected>=0&&selected<(int)objects.size()){
     Vector3 q10=Vector3Add(p,Vector3Add(Vector3Scale(u,outer),Vector3Scale(v,inner)));
     Vector3 q11=Vector3Add(p,Vector3Add(Vector3Scale(u,outer),Vector3Scale(v,outer)));
     Vector3 q01=Vector3Add(p,Vector3Add(Vector3Scale(u,inner),Vector3Scale(v,outer)));
-    DrawTriangle3D(q00,q10,q11,planeColors[h-3]);
-    DrawTriangle3D(q00,q11,q01,planeColors[h-3]);
-    DrawTriangle3D(q11,q10,q00,planeColors[h-3]);
-    DrawTriangle3D(q01,q11,q00,planeColors[h-3]);
-    DrawLine3D(q00,q10,planeColors[h-3]);
-    DrawLine3D(q10,q11,planeColors[h-3]);
-    DrawLine3D(q11,q01,planeColors[h-3]);
-    DrawLine3D(q01,q00,planeColors[h-3]);
+    const Color planeColor=highlightedHandle==h?gizmoHighlight:planeColors[h-3];
+    DrawTriangle3D(q00,q10,q11,planeColor);
+    DrawTriangle3D(q00,q11,q01,planeColor);
+    DrawTriangle3D(q11,q10,q00,planeColor);
+    DrawTriangle3D(q01,q11,q00,planeColor);
+    DrawLine3D(q00,q10,planeColor);
+    DrawLine3D(q10,q11,planeColor);
+    DrawLine3D(q11,q01,planeColor);
+    DrawLine3D(q01,q00,planeColor);
    }
   }
   for(int axis=0;axis<3;axis++){
    Vector3 tip=Vector3Add(p,Vector3Scale(directions[axis],1.6f*gizmoSize));
-   DrawLine3D(p,tip,colors[axis]);
+   const Color axisColor=highlightedHandle==axis?gizmoHighlight:colors[axis];
+   DrawLine3D(p,tip,axisColor);
    if(tool==1){
     // Move: arrowhead, not a scale cube.
-    DrawCylinderEx(Vector3Add(p,Vector3Scale(directions[axis],1.32f*gizmoSize)),tip,.115f*gizmoSize,0.0f,10,colors[axis]);
+    DrawCylinderEx(Vector3Add(p,Vector3Scale(directions[axis],1.32f*gizmoSize)),tip,.115f*gizmoSize,0.0f,10,axisColor);
    }else{
     // Scale: box handle at each axis endpoint.
-    DrawCube(tip,.22f*gizmoSize,.22f*gizmoSize,.22f*gizmoSize,colors[axis]);
+    DrawCube(tip,.22f*gizmoSize,.22f*gizmoSize,.22f*gizmoSize,axisColor);
    }
   }
  }
