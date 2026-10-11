@@ -19,7 +19,7 @@ struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<st
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 // Live node graph preview state is independent from the ImGui panel lifetime.
-struct PbrGraphNode {int id;int type;ImVec2 pos;float value=0.5f;float color[3]={0.8f,0.8f,0.8f};};
+struct PbrGraphNode {int id;int type;ImVec2 pos;std::string name;float value=0.5f;float color[3]={0.8f,0.8f,0.8f};};
 struct PbrGraphLink {int from;int to;int socket;};
 static std::vector<PbrGraphNode> pbrNodes;
 static std::vector<PbrGraphLink> pbrLinks;
@@ -1843,6 +1843,9 @@ if(materialsPanelOpen){
   auto& links=pbrLinks;
   static int nextId=1,connecting=-1;
   static int draggingNode=-1;
+  static int renamingNode=-1;
+  static char renameBuffer[128]={};
+  static bool renameFocus=false;
   static int editingColorNode=-1;
   static bool draggingWire=false;
   static std::string graphFeedback;
@@ -1873,12 +1876,13 @@ if(materialsPanelOpen){
    graphLoaded=true;
    std::ifstream in("N3DLite-shader-graph.txt");
    std::string magic;int count=0,linkCount=0,flag=0;
-   if(in>>magic>>flag>>count>>linkCount&&magic=="N3DLiteGraphV1"&&count>=0&&count<=2048&&linkCount>=0&&linkCount<=8192){
+   if(in>>magic>>flag>>count>>linkCount&&(magic=="N3DLiteGraphV1"||magic=="N3DLiteGraphV2")&&count>=0&&count<=2048&&linkCount>=0&&linkCount<=8192){
     std::vector<ShaderNode> loaded;std::vector<ShaderLink> loadedLinks;
     bool ok=true;
     for(int k=0;k<count;k++){
      ShaderNode n{};
      if(!(in>>n.id>>n.type>>n.pos.x>>n.pos.y>>n.value>>n.color[0]>>n.color[1]>>n.color[2])||n.id<=0||n.type<0||n.type>=18){ok=false;break;}
+     if(magic=="N3DLiteGraphV2"&&!(in>>std::quoted(n.name))){ok=false;break;}
      loaded.push_back(n);
     }
     for(int k=0;k<linkCount&&ok;k++){
@@ -1895,8 +1899,8 @@ if(materialsPanelOpen){
   auto saveGraph=[&](){
    std::ofstream out("N3DLite-shader-graph.txt",std::ios::trunc);
    if(!out){graphFeedback="Could not save shader graph";return;}
-   out<<"N3DLiteGraphV1 "<<(hasPbr?1:0)<<" "<<nodes.size()<<" "<<links.size()<<"\\n";
-   for(const auto& n:nodes)out<<n.id<<" "<<n.type<<" "<<n.pos.x<<" "<<n.pos.y<<" "<<n.value<<" "<<n.color[0]<<" "<<n.color[1]<<" "<<n.color[2]<<"\\n";
+   out<<"N3DLiteGraphV2 "<<(hasPbr?1:0)<<" "<<nodes.size()<<" "<<links.size()<<"\\n";
+   for(const auto& n:nodes)out<<n.id<<" "<<n.type<<" "<<n.pos.x<<" "<<n.pos.y<<" "<<n.value<<" "<<n.color[0]<<" "<<n.color[1]<<" "<<n.color[2]<<" "<<std::quoted(n.name)<<"\\n";
    for(const auto& l:links)out<<l.from<<" "<<l.to<<" "<<l.socket<<"\\n";
    graphFeedback="Shader graph saved";
   };
@@ -1996,13 +2000,25 @@ if(materialsPanelOpen){
     if(n.type!=0&&hoverOutput<0&&std::abs(mouse.x-op.x)<11*zoom&&std::abs(mouse.y-op.y)<11*zoom)hoverOutput=n.id;
    }
    if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&hoverNode<0&&hoverSocketNode<0)ImGui::OpenPopup("Add Shader Node");
+   if(ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)&&hoverNode>=0&&hoverSocketNode<0&&hoverOutput<0){
+    ShaderNode* target=findNode(hoverNode);
+    if(target){
+     ImVec2 header=screen(target->pos);
+     if(inRect(header,ImVec2(header.x+175*zoom,header.y+25*zoom))){
+      renamingNode=target->id;
+      const std::string& label=target->name.empty()?std::string(nodeTypes[target->type]):target->name;
+      std::snprintf(renameBuffer,sizeof(renameBuffer),"%s",label.c_str());
+      renameFocus=true;draggingNode=-1;
+     }
+    }
+   }
    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverColor>=0){editingColorNode=hoverColor;ImGui::OpenPopup("Node Color Picker");}
    // Value field is a real ImGui input drawn below. Never steal its mouse click.
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverOutput>=0){connecting=hoverOutput;draggingWire=true;}
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverSocketNode<0&&hoverNode>=0){
     ShaderNode* n=findNode(hoverNode);
     ImVec2 p=screen(n->pos);
-    if(inRect(p,ImVec2(p.x+175*zoom,p.y+25*zoom)))draggingNode=hoverNode;
+    if(renamingNode!=hoverNode&&inRect(p,ImVec2(p.x+175*zoom,p.y+25*zoom)))draggingNode=hoverNode;
    }
    if(draggingNode>=0){
     if(ImGui::IsMouseDown(ImGuiMouseButton_Left)){
@@ -2018,7 +2034,18 @@ if(materialsPanelOpen){
     ImVec2 p=screen(n.pos),q=screen(ImVec2(n.pos.x+175,n.pos.y+height));
     draw->AddRectFilled(p,q,IM_COL32(47,50,58,255),5);
     draw->AddRectFilled(p,ImVec2(q.x,p.y+25*zoom),n.type==0?IM_COL32(147,96,42,255):IM_COL32(63,94,127,255),5);
-    draw->AddText(ImVec2(p.x+9*zoom,p.y+6*zoom),IM_COL32(255,255,255,255),nodeTypes[n.type]);
+    if(renamingNode!=n.id)
+     draw->AddText(ImVec2(p.x+9*zoom,p.y+6*zoom),IM_COL32(255,255,255,255),n.name.empty()?nodeTypes[n.type]:n.name.c_str());
+    if(renamingNode==n.id){
+     ImGui::SetCursorScreenPos(ImVec2(p.x+5*zoom,p.y+2*zoom));
+     ImGui::SetNextItemWidth(165*zoom);
+     if(renameFocus){ImGui::SetKeyboardFocusHere();renameFocus=false;}
+     bool enter=ImGui::InputText("##RenameNode",renameBuffer,sizeof(renameBuffer),ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_AutoSelectAll);
+     if(enter||(!ImGui::IsItemActive()&&!renameFocus&&!ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))){
+      if(renameBuffer[0])n.name=renameBuffer;
+      renamingNode=-1;
+     }
+    }
     // Header drag is handled by canvas hit-testing, not overlapping widgets.
     for(int i=0;i<(int)inputs.size();i++){
      ImVec2 sp=socketPos(n,i);
