@@ -42,7 +42,7 @@ static void EvaluatePbrGraph(){
   if(depth>64)return {0,0,0};
   const auto* n=nodeById(id);if(!n)return {0,0,0};
   if(n->type==2)return {n->color[0],n->color[1],n->color[2]};
-  if(n->type==3)return {n->value,n->value,n->value};
+  if(n->type==3){const float inverted=1.0f-n->value;return {inverted,inverted,inverted};}
   auto get=[&](int socket,float fallback)->Vector3{
    const auto* l=linkAt(id,socket);
    return l?self(self,l->from,depth+1):Vector3{fallback,fallback,fallback};
