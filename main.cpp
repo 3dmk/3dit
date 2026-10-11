@@ -1111,7 +1111,14 @@ while(!WindowShouldClose()){
   drag.active=false;
   previousSubobjectMode=mode;
  }
- if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_LEFT)){
+ // Track the physical press edge independently of raylib's one-frame pressed
+ // event. A highlighted gizmo must be able to start a drag in Object mode.
+ static bool previousViewportLeftDown=false;
+ const bool viewportLeftDown=IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+ const bool viewportLeftPressed=IsMouseButtonPressed(MOUSE_BUTTON_LEFT)||
+                                (viewportLeftDown&&!previousViewportLeftDown);
+ previousViewportLeftDown=viewportLeftDown;
+ if(inView&&viewportLeftPressed){
   Vector2 m=GetMousePosition();
   if((cutMode||sliceMode)&&mode==3&&selected>=0&&selected<(int)objects.size()){
    if(!cutLineStarted){cutLineStart=m;cutLineEnd=m;cutLineStarted=true;}
