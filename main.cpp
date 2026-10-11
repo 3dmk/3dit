@@ -1788,7 +1788,6 @@ if(materialsPanelOpen){
   static int nextId=1,connecting=-1;
   static int draggingNode=-1;
   static int editingColorNode=-1;
-  static int editingValueNode=-1;
   static bool draggingWire=false;
   static std::string graphFeedback;
   static bool graphLoaded=false;
@@ -1876,6 +1875,7 @@ if(materialsPanelOpen){
    ImVec2 origin=ImGui::GetCursorScreenPos();
    ImVec2 area=ImGui::GetContentRegionAvail();area.x=std::max(250.0f,area.x);area.y=std::max(200.0f,area.y-22);
    ImGui::InvisibleButton("##ShaderCanvas",area,ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight|ImGuiButtonFlags_MouseButtonMiddle);
+   ImGui::SetItemAllowOverlap(); // Overlay node fields can receive mouse focus.
    bool canvasHover=ImGui::IsItemHovered();
    // Node widgets are overlaid after the canvas; canvas hover is background-only.
    if(canvasHover&&ImGui::IsMouseDragging(ImGuiMouseButton_Middle)){
@@ -1934,7 +1934,11 @@ if(materialsPanelOpen){
    }
    if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&hoverNode<0&&hoverSocketNode<0)ImGui::OpenPopup("Add Shader Node");
    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverColor>=0){editingColorNode=hoverColor;ImGui::OpenPopup("Node Color Picker");}
-   else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverValue>=0){editingValueNode=hoverValue;ImGui::OpenPopup("Edit Value");}
+   else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverValue>=0){
+    // The full-canvas InvisibleButton otherwise captures the click.
+    // Release its active ID so the inline numeric field can take keyboard focus.
+    ImGui::ClearActiveID();
+   }
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverOutput>=0){connecting=hoverOutput;draggingWire=true;}
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverSocketNode<0&&hoverNode>=0){
     ShaderNode* n=findNode(hoverNode);
@@ -2010,14 +2014,11 @@ if(materialsPanelOpen){
      draw->AddRectFilled(lo,hi,tint,3);
      draw->AddRect(lo,hi,IM_COL32(210,215,220,255),3);
     }else if(n.type==3){
-     // Read-only number on the canvas; editing occurs in an input popup
-     // outside the canvas hit region, avoiding the overlapping-item bug.
-     ImVec2 lo=screen(ImVec2(n.pos.x+10,n.pos.y+54));
-     ImVec2 hi=screen(ImVec2(n.pos.x+160,n.pos.y+78));
-     draw->AddRectFilled(lo,hi,IM_COL32(35,39,47,255),3);
-     draw->AddRect(lo,hi,IM_COL32(120,129,145,255),3);
-     char number[48];snprintf(number,sizeof(number),"%.4g",n.value);
-     draw->AddText(ImVec2(lo.x+8*zoom,lo.y+5*zoom),IM_COL32(242,242,245,255),number);
+     // The only numeric control: directly editable in the node, no popup.
+     ImGui::SetCursorScreenPos(screen(ImVec2(n.pos.x+10,n.pos.y+54)));
+     ImGui::SetNextItemWidth(150*zoom);
+     ImGui::InputFloat("##NodeValue",&n.value,0.0f,0.0f,"%.4f");
+
     }
     ImGui::PopID();
    }
@@ -2037,14 +2038,6 @@ if(materialsPanelOpen){
      ImGui::Text("Color node #%d",chosen->id);
      ImGui::ColorPicker3("##NodeColorPicker",chosen->color);
      ImGui::ColorEdit3("RGB",chosen->color);
-    }else ImGui::CloseCurrentPopup();
-    ImGui::EndPopup();
-   }
-   if(ImGui::BeginPopup("Edit Value")){
-    ShaderNode* chosen=findNode(editingValueNode);
-    if(chosen&&chosen->type==3){
-     ImGui::SetNextItemWidth(170);
-     ImGui::InputFloat("##EditNodeNumber",&chosen->value,0.0f,0.0f,"%.4f");
     }else ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
    }
