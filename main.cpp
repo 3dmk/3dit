@@ -1874,8 +1874,14 @@ if(materialsPanelOpen){
    ImGui::TextDisabled("Right-click empty canvas: add node | drag header: move | middle-drag: pan | wheel: zoom | click sockets: connect | right-click input: unlink");
    ImVec2 origin=ImGui::GetCursorScreenPos();
    ImVec2 area=ImGui::GetContentRegionAvail();area.x=std::max(250.0f,area.x);area.y=std::max(200.0f,area.y-22);
-   ImGui::InvisibleButton("##ShaderCanvas",area,ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight|ImGuiButtonFlags_MouseButtonMiddle);
-   bool canvasHover=ImGui::IsItemHovered();
+   // Reserve canvas layout without an active ImGui item: an InvisibleButton
+   // covering the entire graph steals keyboard focus from inline node inputs.
+   ImGui::Dummy(area);
+   const ImVec2 canvasMouse=ImGui::GetMousePos();
+   const bool canvasHover=ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)
+    &&canvasMouse.x>=origin.x&&canvasMouse.y>=origin.y
+    &&canvasMouse.x<origin.x+area.x&&canvasMouse.y<origin.y+area.y
+    &&!ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
    // Node widgets are overlaid after the canvas; canvas hover is background-only.
    if(canvasHover&&ImGui::IsMouseDragging(ImGuiMouseButton_Middle)){
     pan.x+=ImGui::GetIO().MouseDelta.x;pan.y+=ImGui::GetIO().MouseDelta.y;
@@ -1933,11 +1939,7 @@ if(materialsPanelOpen){
    }
    if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&hoverNode<0&&hoverSocketNode<0)ImGui::OpenPopup("Add Shader Node");
    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverColor>=0){editingColorNode=hoverColor;ImGui::OpenPopup("Node Color Picker");}
-   else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverValue>=0){
-    // The full-canvas InvisibleButton otherwise captures the click.
-    // Release its active ID so the inline numeric field can take keyboard focus.
-    ImGui::ClearActiveID();
-   }
+   // Value field is a real ImGui input drawn below. Never steal its mouse click.
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverOutput>=0){connecting=hoverOutput;draggingWire=true;}
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverSocketNode<0&&hoverNode>=0){
     ShaderNode* n=findNode(hoverNode);
