@@ -1845,6 +1845,7 @@ if(materialsPanelOpen){
   auto& links=pbrLinks;
   static int nextId=1,connecting=-1;
   static int draggingNode=-1;
+  static int selectedNode=-1;
   static int renamingNode=-1;
   static char renameBuffer[128]={};
   static bool renameFocus=false;
@@ -1929,7 +1930,7 @@ if(materialsPanelOpen){
    if(ImGui::Button("Clear Graph"))ImGui::OpenPopup("Clear Shader Graph?");
    if(ImGui::BeginPopupModal("Clear Shader Graph?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)){
     ImGui::TextUnformatted("Delete all shader nodes and connections?");
-    if(ImGui::Button("Delete")){nodes.clear();links.clear();hasPbr=false;connecting=-1;ImGui::CloseCurrentPopup();}
+    if(ImGui::Button("Delete")){nodes.clear();links.clear();hasPbr=false;connecting=-1;selectedNode=-1;ImGui::CloseCurrentPopup();}
     ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
    }
@@ -2014,6 +2015,11 @@ if(materialsPanelOpen){
      }
     }
    }
+   // Select by clicking the node body/header, but not its editable controls.
+   if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverNode>=0)
+    selectedNode=hoverNode;
+   else if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverNode<0&&hoverSocketNode<0)
+    selectedNode=-1;
    if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverColor>=0){editingColorNode=hoverColor;ImGui::OpenPopup("Node Color Picker");}
    // Value field is a real ImGui input drawn below. Never steal its mouse click.
    else if(ImGui::IsMouseClicked(ImGuiMouseButton_Left)&&hoverOutput>=0){connecting=hoverOutput;draggingWire=true;}
@@ -2029,12 +2035,38 @@ if(materialsPanelOpen){
      }
     }else draggingNode=-1;
    }
+   // Delete only when no text field is editing and the graph owns keyboard focus.
+   if(selectedNode>=0&&renamingNode<0&&!ImGui::GetIO().WantTextInput
+      &&ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)
+      &&ImGui::IsKeyPressed(ImGuiKey_Delete,false)){
+    const int doomed=selectedNode;
+    nodes.erase(std::remove_if(nodes.begin(),nodes.end(),[&](const ShaderNode& n){return n.id==doomed;}),nodes.end());
+    links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.from==doomed||l.to==doomed;}),links.end());
+    if(connecting==doomed)connecting=-1;
+    if(draggingNode==doomed)draggingNode=-1;
+    if(editingColorNode==doomed)editingColorNode=-1;
+    selectedNode=-1;
+    graphFeedback="Selected shader node deleted";
+   }
    for(auto& n:nodes){
     ImGui::PushID(n.id);
     const auto inputs=sockets(n.type);
     const float height=std::max(82.0f,55.0f+22.0f*(float)inputs.size());
     ImVec2 p=screen(n.pos),q=screen(ImVec2(n.pos.x+175,n.pos.y+height));
     draw->AddRectFilled(p,q,IM_COL32(47,50,58,255),5);
+    if(selectedNode==n.id){
+     const ImU32 accent=IM_COL32(255,190,75,255);
+     draw->AddRect(p,q,accent,5,0,2.0f);
+     const float k=10.0f*zoom;
+     draw->AddLine(ImVec2(p.x,p.y+k),p,accent,3.0f);
+     draw->AddLine(p,ImVec2(p.x+k,p.y),accent,3.0f);
+     draw->AddLine(ImVec2(q.x-k,p.y),ImVec2(q.x,p.y),accent,3.0f);
+     draw->AddLine(ImVec2(q.x,p.y),ImVec2(q.x,p.y+k),accent,3.0f);
+     draw->AddLine(ImVec2(p.x,q.y-k),ImVec2(p.x,q.y),accent,3.0f);
+     draw->AddLine(ImVec2(p.x,q.y),ImVec2(p.x+k,q.y),accent,3.0f);
+     draw->AddLine(ImVec2(q.x-k,q.y),q,accent,3.0f);
+     draw->AddLine(q,ImVec2(q.x,q.y-k),accent,3.0f);
+    }
     draw->AddRectFilled(p,ImVec2(q.x,p.y+25*zoom),n.type==0?IM_COL32(147,96,42,255):IM_COL32(63,94,127,255),5);
     if(renamingNode!=n.id)
      draw->AddText(ImVec2(p.x+9*zoom,p.y+6*zoom),IM_COL32(255,255,255,255),n.name.empty()?nodeTypes[n.type]:n.name.c_str());
