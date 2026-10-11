@@ -1650,18 +1650,47 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  ImGui::SameLine(0,14);
  ImGui::TextDisabled("Viewport");
  ImGui::SameLine(0,5);
- auto displayButton=[&](const char* label,int display,const char* hint){
-  if(viewportDisplayMode==display)ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.22f,0.42f,0.62f,1.0f));
-  bool clicked=ImGui::SmallButton(label);
-  if(viewportDisplayMode==display)ImGui::PopStyleColor();
-  if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",hint);
+ auto displayButton=[&](const char* id,int display,const char* hint){
+  // Three identical square icon-only buttons, drawn as solid/edge cubes.
+  ImGui::PushID(id);
+  const float side=29.0f;
+  ImVec2 pos=ImGui::GetCursorScreenPos();
+  bool active=viewportDisplayMode==display;
+  if(active)ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.22f,0.42f,0.62f,1.0f));
+  bool clicked=ImGui::InvisibleButton("##ViewMode",ImVec2(side,side));
+  if(active)ImGui::PopStyleColor();
+  bool hovered=ImGui::IsItemHovered();
+  ImDrawList* dl=ImGui::GetWindowDrawList();
+  ImU32 bg=ImGui::GetColorU32(active?ImGuiCol_ButtonActive:hovered?ImGuiCol_ButtonHovered:ImGuiCol_Button);
+  dl->AddRectFilled(pos,ImVec2(pos.x+side,pos.y+side),bg,4);
+  ImU32 line=IM_COL32(228,232,238,255);
+  ImU32 fill=IM_COL32(135,169,203,255);
+  ImVec2 p[8]={
+   {pos.x+8,pos.y+9},{pos.x+18,pos.y+9},{pos.x+23,pos.y+14},{pos.x+13,pos.y+14},
+   {pos.x+8,pos.y+20},{pos.x+18,pos.y+20},{pos.x+23,pos.y+15},{pos.x+13,pos.y+15}
+  };
+  // Top and two visible cube faces, no font glyphs or variable-size labels.
+  if(display!=2){
+   dl->AddQuadFilled(p[0],p[1],p[2],p[3],fill);
+   dl->AddQuadFilled(p[0],p[3],p[7],p[4],IM_COL32(97,129,160,255));
+   dl->AddQuadFilled(p[3],p[2],p[6],p[7],IM_COL32(75,102,132,255));
+  }
+  if(display!=0){
+   dl->AddLine(p[0],p[1],line,1.5f);dl->AddLine(p[1],p[2],line,1.5f);
+   dl->AddLine(p[2],p[3],line,1.5f);dl->AddLine(p[3],p[0],line,1.5f);
+   dl->AddLine(p[0],p[4],line,1.5f);dl->AddLine(p[3],p[7],line,1.5f);
+   dl->AddLine(p[2],p[6],line,1.5f);dl->AddLine(p[4],p[7],line,1.5f);
+   dl->AddLine(p[7],p[6],line,1.5f);
+  }
+  if(hovered)ImGui::SetTooltip("%s",hint);
   if(clicked)viewportDisplayMode=display;
+  ImGui::PopID();
  };
- displayButton("S",0,"Shaded");
+ displayButton("Shaded",0,"Shaded");
  ImGui::SameLine(0,3);
- displayButton("S+W",1,"Shaded + Wireframe");
+ displayButton("ShadedWire",1,"Shaded + Wireframe");
  ImGui::SameLine(0,3);
- displayButton("W",2,"Wireframe (polygon edges, no triangulation)");
+ displayButton("Wire",2,"Wireframe (polygon edges, no triangulation)");
  ImGui::SameLine(0,18);
  if(ImGui::Button("Materials")){
   materialsPanelOpen=!materialsPanelOpen;
