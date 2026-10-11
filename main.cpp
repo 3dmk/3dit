@@ -47,6 +47,12 @@ static void EvaluatePbrGraph(){
    const auto* l=linkAt(id,socket);
    return l?self(self,l->from,depth+1):Vector3{fallback,fallback,fallback};
   };
+  if(n->type==17){Vector3 x=get(0,n->value);return {1.0f-x.x,1.0f-x.y,1.0f-x.z};}
+  if(n->type==16){
+   Vector3 x=get(0,n->value),ex=get(1,2.0f);
+   auto power=[](float a,float b){float v=std::pow(std::max(0.0f,a),std::clamp(b,-16.0f,16.0f));return std::isfinite(v)?v:0.0f;};
+   return {power(x.x,ex.x),power(x.y,ex.y),power(x.z,ex.z)};
+  }
   if(n->type==7||n->type==9||n->type==10||n->type==6){
    Vector3 x=get(0,n->value),y=get(1,n->value);
    if(n->type==9)return {x.x*y.x,x.y*y.y,x.z*y.z};
@@ -1844,13 +1850,15 @@ if(materialsPanelOpen){
   bool& hasPbr=pbrEnabled;
   static ImVec2 pan(0,0);
   static float zoom=1.0f;
-  const char* nodeTypes[]={"PBR_Shader","Image Texture","Color","Value","Noise","Normal Map","Mix","Math","UV Map","Multiply","Add","Fresnel","Emission","AO","Separate RGB","Combine RGB"};
+  const char* nodeTypes[]={"PBR_Shader","Image Texture","Color","Value","Noise","Normal Map","Mix","Math","UV Map","Multiply","Add","Fresnel","Emission","AO","Separate RGB","Combine RGB","Power","Invert"};
   auto sockets=[&](int type)->std::vector<const char*>{
    switch(type){
     case 0:return {"Base Color","Metallic","Roughness","Normal","AO","Emission","Opacity","IOR","Transmission","Clearcoat"};
     case 5:return {"Color","Strength"};
     case 6:return {"A","B","Factor"};
     case 7:case 9:case 10:return {"A","B"};
+    case 16:return {"Value","Exponent"};
+    case 17:return {"Value"};
     case 1:return {"UV"};
     case 4:return {"Scale","Detail"};
     case 11:return {"IOR","Normal"};
@@ -1870,7 +1878,7 @@ if(materialsPanelOpen){
     bool ok=true;
     for(int k=0;k<count;k++){
      ShaderNode n{};
-     if(!(in>>n.id>>n.type>>n.pos.x>>n.pos.y>>n.value>>n.color[0]>>n.color[1]>>n.color[2])||n.id<=0||n.type<0||n.type>=16){ok=false;break;}
+     if(!(in>>n.id>>n.type>>n.pos.x>>n.pos.y>>n.value>>n.color[0]>>n.color[1]>>n.color[2])||n.id<=0||n.type<0||n.type>=18){ok=false;break;}
      loaded.push_back(n);
     }
     for(int k=0;k<linkCount&&ok;k++){
@@ -1954,7 +1962,7 @@ if(materialsPanelOpen){
    // Context menu is opened after node hit-testing so right-clicking a socket does not add a node.
    if(ImGui::BeginPopup("Add Shader Node")){
     ImVec2 mouse=ImGui::GetMousePosOnOpeningCurrentPopup();
-    for(int type=1;type<16;type++)if(ImGui::MenuItem(nodeTypes[type])){
+    for(int type=1;type<18;type++)if(ImGui::MenuItem(nodeTypes[type])){
      nodes.push_back({nextId++,type,ImVec2((mouse.x-origin.x-pan.x)/zoom,(mouse.y-origin.y-pan.y)/zoom)});
     }
     ImGui::EndPopup();
@@ -2021,13 +2029,13 @@ if(materialsPanelOpen){
      if(hoverSocketNode==n.id&&hoverSocketIndex==i&&connecting>=0&&connecting!=n.id&&((draggingWire&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))||(!draggingWire&&ImGui::IsMouseClicked(ImGuiMouseButton_Left)))){
       ShaderNode* source=findNode(connecting);
       // Socket categories: 0 scalar, 1 color, 2 vector, 3 normal.
-      auto outputKind=[](int t){switch(t){case 1:case 2:case 6:case 7:case 9:case 10:case 12:case 15:return 1;case 5:return 3;case 8:return 2;default:return 0;}};
+      auto outputKind=[](int t){switch(t){case 1:case 2:case 6:case 7:case 9:case 10:case 12:case 15:case 16:case 17:return 1;case 5:return 3;case 8:return 2;default:return 0;}};
       auto inputKind=[&](int t,int slot){
        if(t==0){if(slot==0||slot==5)return 1;if(slot==3)return 3;return 0;}
        if(t==5)return slot==0?1:0;
        if(t==1)return 2;
        if(t==6)return slot<2?1:0;
-       if(t==7||t==9||t==10)return 1;
+       if(t==7||t==9||t==10||t==16||t==17)return 1;
        if(t==12)return slot==0?1:0;
        if(t==14)return 1;
        return 0;
