@@ -14,6 +14,7 @@
 #include <fstream>
 #include <climits>
 void ApplyN3DLiteTitlebarTheme();
+int viewportDisplayMode=0;
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
@@ -1280,6 +1281,8 @@ if(gpuCache.size()!=objects.size()){
  gpuCache.resize(objects.size());
 }
 const double meshDrawStart=GetTime();
+// 0: shaded, 1: shaded + polygon wireframe, 2: wireframe only.
+
 rlDrawRenderBatchActive();
 if(backfaceCulling)rlEnableBackfaceCulling();
 else rlDisableBackfaceCulling();
@@ -1362,7 +1365,7 @@ for(int oi=0;oi<(int)objects.size();oi++){
    }
   }
  }
- if(entry.uploaded){
+ if(entry.uploaded&&viewportDisplayMode!=2){
   static Material viewportMaterial=LoadMaterialDefault();
   Material material=viewportMaterial;
   // Use the same view-dependent material shader for flat and smooth objects.
@@ -1387,8 +1390,8 @@ for(int oi=0;oi<(int)objects.size();oi++){
   const bool highlighted=oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0));
   if(highlighted)for(size_t j=1;j+1<f.size();j++)
    DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),Color{215,45,50,255});
-  for(size_t j=0;j<f.size();j++)
-   DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:Color{78,82,88,255});
+  if(viewportDisplayMode!=0||highlighted||oi==selected&&mode!=0)for(size_t j=0;j<f.size();j++)
+   DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:viewportDisplayMode==2?Color{190,194,201,255}:Color{38,41,47,255});
  }
 }
 rlDrawRenderBatchActive();
@@ -1644,6 +1647,21 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  }else{
   ImGui::TextDisabled("X: --  Y: --  Z: --");
  }
+ ImGui::SameLine(0,14);
+ ImGui::TextDisabled("Viewport");
+ ImGui::SameLine(0,5);
+ auto displayButton=[&](const char* label,int display,const char* hint){
+  if(viewportDisplayMode==display)ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.22f,0.42f,0.62f,1.0f));
+  bool clicked=ImGui::SmallButton(label);
+  if(viewportDisplayMode==display)ImGui::PopStyleColor();
+  if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",hint);
+  if(clicked)viewportDisplayMode=display;
+ };
+ displayButton("S",0,"Shaded");
+ ImGui::SameLine(0,3);
+ displayButton("S+W",1,"Shaded + Wireframe");
+ ImGui::SameLine(0,3);
+ displayButton("W",2,"Wireframe (polygon edges, no triangulation)");
  ImGui::SameLine(0,18);
  if(ImGui::Button("Materials")){
   materialsPanelOpen=!materialsPanelOpen;
