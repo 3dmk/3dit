@@ -2002,7 +2002,10 @@ if(materialsPanelOpen){
     ImVec2 op=screen(ImVec2(n.pos.x+175,n.pos.y+39));
     if(n.type!=0&&hoverOutput<0&&std::abs(mouse.x-op.x)<11*zoom&&std::abs(mouse.y-op.y)<11*zoom)hoverOutput=n.id;
    }
-   if(canvasHover&&ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&hoverNode<0&&hoverSocketNode<0)ImGui::OpenPopup("Add Shader Node");
+   // Right-click cancels a pending wire before any context-menu or socket action.
+   const bool cancelWire=connecting>=0&&ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+   if(cancelWire){connecting=-1;draggingWire=false;graphFeedback="Connection cancelled";}
+   if(canvasHover&&!cancelWire&&ImGui::IsMouseClicked(ImGuiMouseButton_Right)&&hoverNode<0&&hoverSocketNode<0)ImGui::OpenPopup("Add Shader Node");
    if(ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)&&hoverNode>=0&&hoverSocketNode<0&&hoverOutput<0){
     ShaderNode* target=findNode(hoverNode);
     if(target){
@@ -2085,7 +2088,7 @@ if(materialsPanelOpen){
      ImVec2 sp=socketPos(n,i);
      draw->AddCircleFilled(sp,5*zoom,IM_COL32(233,171,77,255));
      draw->AddText(ImVec2(sp.x+10*zoom,sp.y-6*zoom),IM_COL32(210,214,221,255),inputs[i]);
-     if(hoverSocketNode==n.id&&hoverSocketIndex==i&&ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+     if(!cancelWire&&hoverSocketNode==n.id&&hoverSocketIndex==i&&ImGui::IsMouseClicked(ImGuiMouseButton_Right))
       links.erase(std::remove_if(links.begin(),links.end(),[&](const ShaderLink& l){return l.to==n.id&&l.socket==i;}),links.end());
      if(hoverSocketNode==n.id&&hoverSocketIndex==i&&connecting>=0&&connecting!=n.id&&((draggingWire&&ImGui::IsMouseReleased(ImGuiMouseButton_Left))||(!draggingWire&&ImGui::IsMouseClicked(ImGuiMouseButton_Left)))){
       ShaderNode* source=findNode(connecting);
