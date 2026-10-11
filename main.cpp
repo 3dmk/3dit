@@ -12,6 +12,8 @@
 #include <map>
 #include <utility>
 #include <fstream>
+#include <iomanip>
+#include <cstdio>
 #include <climits>
 void ApplyN3DLiteTitlebarTheme();
 int viewportDisplayMode=0;
