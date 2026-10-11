@@ -899,6 +899,9 @@ int main(){
  const int locCamera=GetShaderLocation(smoothShader,"cameraPosition");
  rlImGuiSetup(true);
  ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+ // Dragging inside graph canvases or panel content must never move the window.
+ // Floating panels remain movable from their title bars and dock tabs.
+ ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly=true;
  ImGui::GetIO().IniFilename="N3DLite-layout.ini";
  ImGui::LoadIniSettingsFromDisk("N3DLite-layout.ini");
  // Material editor starts closed on every launch, regardless of saved docking state.
