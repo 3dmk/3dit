@@ -1875,7 +1875,6 @@ if(materialsPanelOpen){
    ImVec2 origin=ImGui::GetCursorScreenPos();
    ImVec2 area=ImGui::GetContentRegionAvail();area.x=std::max(250.0f,area.x);area.y=std::max(200.0f,area.y-22);
    ImGui::InvisibleButton("##ShaderCanvas",area,ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonRight|ImGuiButtonFlags_MouseButtonMiddle);
-   ImGui::SetItemAllowOverlap(); // Overlay node fields can receive mouse focus.
    bool canvasHover=ImGui::IsItemHovered();
    // Node widgets are overlaid after the canvas; canvas hover is background-only.
    if(canvasHover&&ImGui::IsMouseDragging(ImGuiMouseButton_Middle)){
