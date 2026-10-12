@@ -27,6 +27,8 @@ static std::vector<PbrGraphNode> pbrNodes;
 static std::vector<PbrGraphLink> pbrLinks;
 static bool pbrEnabled=false;
 static int pbrMaterialId=-1;
+struct SavedPbrMaterial {int materialId;std::vector<PbrGraphNode> nodes;std::vector<PbrGraphLink> links;};
+static std::vector<SavedPbrMaterial> savedPbrMaterials;
 static void EvaluatePbrGraph(){
  if(!pbrEnabled||pbrMaterialId<0||pbrMaterialId>=(int)materials.size())return;
  auto& mat=materials[pbrMaterialId];
@@ -1900,6 +1902,8 @@ if(materialsPanelOpen){
   static bool draggingWire=false;
   static std::string graphFeedback;
   static bool graphLoaded=false;
+  static bool materialLibraryLoaded=false;
+  static char materialNameBuffer[96]="PBR Material";
   bool& hasPbr=pbrEnabled;
   static ImVec2 pan(0,0);
   static float zoom=1.0f;
@@ -1946,6 +1950,51 @@ if(materialsPanelOpen){
     }
    }
   }
+  // Persist material definitions and their individual node graphs.
+  if(!materialLibraryLoaded){
+   materialLibraryLoaded=true;
+   std::ifstream in("N3DLite-material-library.txt");
+   std::string magic;int count=0;
+   if(in>>magic>>count&&magic=="N3DLiteMaterialsV1"&&count>=0&&count<=256){
+    for(int i=0;i<count;i++){
+     EditorMaterial mat;int nc=0,lc=0;
+     if(!(in>>std::quoted(mat.name)>>mat.baseColor[0]>>mat.baseColor[1]>>mat.baseColor[2]>>mat.roughness>>mat.metallic>>mat.specular>>nc>>lc)||nc<0||nc>2048||lc<0||lc>8192)break;
+     SavedPbrMaterial saved{};bool ok=true;
+     for(int j=0;j<nc;j++){
+      ShaderNode n{};
+      if(!(in>>n.id>>n.type>>n.pos.x>>n.pos.y>>n.value>>n.color[0]>>n.color[1]>>n.color[2]>>std::quoted(n.name))||n.id<=0||n.type<0||n.type>=18){ok=false;break;}
+      saved.nodes.push_back(n);
+     }
+     for(int j=0;j<lc&&ok;j++){ShaderLink l{};if(!(in>>l.from>>l.to>>l.socket)){ok=false;break;}saved.links.push_back(l);}
+     if(!ok)break;
+     saved.materialId=(int)materials.size();materials.push_back(mat);savedPbrMaterials.push_back(std::move(saved));
+    }
+   }
+  }
+  auto persistMaterials=[&](){
+   std::ofstream out("N3DLite-material-library.txt",std::ios::trunc);
+   if(!out){graphFeedback="Cannot save material library";return false;}
+   out<<"N3DLiteMaterialsV1 "<<savedPbrMaterials.size()<<"\n";
+   for(const auto& saved:savedPbrMaterials){
+    const auto& m=materials[saved.materialId];
+    out<<std::quoted(m.name)<<" "<<m.baseColor[0]<<" "<<m.baseColor[1]<<" "<<m.baseColor[2]<<" "<<m.roughness<<" "<<m.metallic<<" "<<m.specular<<" "<<saved.nodes.size()<<" "<<saved.links.size()<<"\n";
+    for(const auto& n:saved.nodes)out<<n.id<<" "<<n.type<<" "<<n.pos.x<<" "<<n.pos.y<<" "<<n.value<<" "<<n.color[0]<<" "<<n.color[1]<<" "<<n.color[2]<<" "<<std::quoted(n.name)<<"\n";
+    for(const auto& l:saved.links)out<<l.from<<" "<<l.to<<" "<<l.socket<<"\n";
+   }
+   return out.good();
+  };
+  auto saveMaterial=[&](){
+   if(!hasPbr){graphFeedback="Add a PBR shader first";return;}
+   if(pbrMaterialId<1||pbrMaterialId>=(int)materials.size()){
+    EditorMaterial m;m.name=materialNameBuffer;materials.push_back(m);pbrMaterialId=(int)materials.size()-1;
+   }
+   if(materialNameBuffer[0])materials[pbrMaterialId].name=materialNameBuffer;
+   EvaluatePbrGraph();
+   auto it=std::find_if(savedPbrMaterials.begin(),savedPbrMaterials.end(),[&](const SavedPbrMaterial& v){return v.materialId==pbrMaterialId;});
+   if(it==savedPbrMaterials.end())savedPbrMaterials.push_back({pbrMaterialId,nodes,links});
+   else {it->nodes=nodes;it->links=links;}
+   graphFeedback=persistMaterials()?"Material saved":"Material save failed";
+  };
   auto saveGraph=[&](){
    std::ofstream out("N3DLite-shader-graph.txt",std::ios::trunc);
    if(!out){graphFeedback="Could not save shader graph";return;}
@@ -1954,6 +2003,39 @@ if(materialsPanelOpen){
    for(const auto& l:links)out<<l.from<<" "<<l.to<<" "<<l.socket<<"\\n";
    graphFeedback="Shader graph saved";
   };
+  if(ImGui::CollapsingHeader("Saved Materials",ImGuiTreeNodeFlags_DefaultOpen)){
+   for(const auto& saved:savedPbrMaterials){
+    const EditorMaterial& mat=materials[saved.materialId];
+    ImGui::PushID(saved.materialId);
+    ImVec2 p=ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("##MaterialPreview",ImVec2(48,48));
+    ImDrawList* dl=ImGui::GetWindowDrawList();
+    dl->AddRectFilled(p,ImVec2(p.x+48,p.y+48),IM_COL32(33,36,42,255),4.0f);
+    for(int ring=17;ring>=1;--ring){
+     float t=(float)ring/17.0f;
+     float light=0.23f+0.77f*(1.0f-t*t);
+     dl->AddCircleFilled(ImVec2(p.x+23-(1-t)*5,p.y+24-(1-t)*5),ring,
+      IM_COL32((int)(std::clamp(mat.baseColor[0]*light,0.0f,1.0f)*255),
+               (int)(std::clamp(mat.baseColor[1]*light,0.0f,1.0f)*255),
+               (int)(std::clamp(mat.baseColor[2]*light,0.0f,1.0f)*255),255),32);
+    }
+    ImGui::SameLine();
+    ImGui::BeginGroup();
+    ImGui::TextUnformatted(mat.name.c_str());
+    if(ImGui::SmallButton("Edit")){
+     nodes=saved.nodes;links=saved.links;hasPbr=true;pbrMaterialId=saved.materialId;activeMaterial=pbrMaterialId;
+     snprintf(materialNameBuffer,sizeof(materialNameBuffer),"%s",mat.name.c_str());
+     nextId=1;for(const auto& n:nodes)nextId=std::max(nextId,n.id+1);
+     connecting=-1;draggingNode=-1;selectedNode=-1;graphFeedback="Material loaded";
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(selected<0||selected>=(int)objects.size());
+    if(ImGui::SmallButton("Apply")){checkpoint();objects[selected].materialId=saved.materialId;}
+    ImGui::EndDisabled();
+    ImGui::EndGroup();
+    ImGui::PopID();
+   }
+  }
   if(!hasPbr){
    // Compact material/shader icon button instead of a full-width text button.
    if(ImGui::InvisibleButton("##AddPBRShader",ImVec2(44,44))){
@@ -1975,6 +2057,10 @@ if(materialsPanelOpen){
     icons->AddLine(ImVec2(c.x+10,c.y-8),ImVec2(c.x+4,c.y-3),IM_COL32(240,180,100,255),1.5f);
    }
   }else{
+   ImGui::SetNextItemWidth(170);
+   ImGui::InputText("##MaterialName",materialNameBuffer,sizeof(materialNameBuffer));
+   ImGui::SameLine();
+   if(ImGui::Button("Save Material"))saveMaterial();
    if(ImGui::Button("Assign to Selected")&&selected>=0&&selected<(int)objects.size()){
     checkpoint();
     if(pbrMaterialId<0||pbrMaterialId>=(int)materials.size()){
