@@ -1902,6 +1902,7 @@ if(materialsPanelOpen){
   static bool draggingWire=false;
   static std::string graphFeedback;
   static bool graphLoaded=false;
+  static bool graphWindowOpen=false;
   static bool materialLibraryLoaded=false;
   static char materialNameBuffer[96]="PBR Material";
   bool& hasPbr=pbrEnabled;
@@ -2026,7 +2027,7 @@ if(materialsPanelOpen){
      nodes=saved.nodes;links=saved.links;hasPbr=true;pbrMaterialId=saved.materialId;activeMaterial=pbrMaterialId;
      snprintf(materialNameBuffer,sizeof(materialNameBuffer),"%s",mat.name.c_str());
      nextId=1;for(const auto& n:nodes)nextId=std::max(nextId,n.id+1);
-     connecting=-1;draggingNode=-1;selectedNode=-1;graphFeedback="Material loaded";
+     connecting=-1;draggingNode=-1;selectedNode=-1;graphWindowOpen=true;graphFeedback="Material loaded";
     }
     ImGui::SameLine();
     ImGui::BeginDisabled(selected<0||selected>=(int)objects.size());
@@ -2036,6 +2037,11 @@ if(materialsPanelOpen){
     ImGui::PopID();
    }
   }
+  if(ImGui::Button("Open Shader Graph"))graphWindowOpen=true;
+  if(graphWindowOpen){
+   ImGui::SetNextWindowSize(ImVec2(950,680),ImGuiCond_FirstUseEver);
+   const bool graphVisible=ImGui::Begin("PBR Shader Graph",&graphWindowOpen);
+   if(graphVisible){
   if(!hasPbr){
    // Compact material/shader icon button instead of a full-width text button.
    if(ImGui::InvisibleButton("##AddPBRShader",ImVec2(44,44))){
@@ -2316,6 +2322,9 @@ if(materialsPanelOpen){
    EvaluatePbrGraph();
    ImGui::TextDisabled("%d nodes | %d links | %.0f%% zoom | Base Color/Roughness/Metallic live viewport preview; full PBR pending",(int)nodes.size(),(int)links.size(),zoom*100.0f);
   }
+   }
+   ImGui::End();
+  }
  }
  ImGui::End();
 }
@@ -2323,7 +2332,7 @@ if(materialsPanelOpen){
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Editable Polygon","Create Objects","Materials","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Editable Polygon","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
