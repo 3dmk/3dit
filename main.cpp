@@ -1761,11 +1761,9 @@ if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId)){
 if(ImGui::Begin("Editable Polygon")){
  ImGui::TextUnformatted("Object Properties");
  if(ImGui::CollapsingHeader("Smoothing Groups",ImGuiTreeNodeFlags_DefaultOpen)){
-  ImGui::TextDisabled("Mesh submission: %.2f ms | Frame: %.1f FPS",meshDrawMs,(double)GetFPS());
   if(selected>=0&&selected<(int)objects.size()){
    MeshObject& o=objects[selected];
    ImGui::Text("Object: %s",o.name.c_str());
-   ImGui::TextDisabled("Group 0 = Flat; groups 1-32 have independent smoothing values");
    // Compact drop-down replaces the 32-button grid.
    char selectedGroup[40];
    snprintf(selectedGroup,sizeof(selectedGroup),o.smoothingGroup==0?"0 - Flat":"%d - Smooth",o.smoothingGroup);
@@ -1786,11 +1784,9 @@ if(ImGui::Begin("Editable Polygon")){
     if(ImGui::SliderFloat("Smooth value (0-100)",&value,0.0f,100.0f,"%.0f")){
      if(value!=o.smoothingValues[o.smoothingGroup]){checkpoint();o.smoothingValues[o.smoothingGroup]=value;}
     }
-    ImGui::TextDisabled("0 = hard edges; 100 = fully averaged normals");
    }
    if(ImGui::Button("Flat Shading",ImVec2(-1,0))&&o.smoothingGroup!=0){checkpoint();o.smoothingGroup=0;}
    if(ImGui::Button("Smooth Shading",ImVec2(-1,0))&&o.smoothingGroup==0){checkpoint();o.smoothingGroup=1;}
-   ImGui::TextWrapped("Each group has its own 0-100 smoothing strength for this object. Groups are currently object-wide.");
   }else ImGui::TextDisabled("Select an object to edit smoothing");
  }
  
