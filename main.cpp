@@ -984,7 +984,7 @@ ImGui::StyleColorsDark();
  c[ImGuiCol_NavHighlight]=ImVec4(.65f,.65f,.65f,.8f);
 }
 if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFontLoaded=uiFont.texture.id!=0;}
-camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
+camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=12.0f;camera.projection=CAMERA_ORTHOGRAPHIC;objects.push_back(box());selected=0;
 int connectFeedback=0;
 bool crosshairCursorHidden=false;
 bool openVertexContext=false;
@@ -1288,7 +1288,10 @@ if(inView&&IsKeyPressed(KEY_F)&&selected>=0){camera.target=pivot(objects[selecte
 if(inView&&IsKeyPressed(KEY_KP_1)){camera.target={0,0,0};camera.position={0,-10,0.001f};}
 if(inView&&IsKeyPressed(KEY_KP_3)){camera.target={0,0,0};camera.position={10,0,0.001f};}
 if(inView&&IsKeyPressed(KEY_KP_7)){camera.target={0,0,0};camera.position={0,0,10};}
-if(inView){float wheel=GetMouseWheelMove();if(wheel!=0){Vector3 dir=Vector3Normalize(Vector3Subtract(camera.target,camera.position));camera.position=Vector3Add(camera.position,Vector3Scale(dir,wheel*.5f));}}
+if(inView){float wheel=GetMouseWheelMove();if(wheel!=0){
+ // Orthographic zoom changes the vertical world-space span, not camera distance.
+ camera.fovy=std::clamp(camera.fovy*std::pow(0.88f,wheel),0.1f,1000.0f);
+}}
 // Object or face manipulation: hold X/Y/Z while using arrow keys; one history snapshot per key press.
 int axis=IsKeyDown(KEY_X)?0:IsKeyDown(KEY_Y)?1:IsKeyDown(KEY_Z)?2:-1;float delta=(IsKeyPressed(KEY_UP)? .2f:0)+(IsKeyPressed(KEY_DOWN)?-.2f:0);if(selected>=0&&axis>=0&&delta!=0){checkpoint();auto&o=objects[selected];if(mode==3&&face>=0){for(int i:o.faces[face]){float *v=&o.vertices[i].x;v[axis]+=delta;}}else{float *v=&o.position.x;v[axis]+=delta;}}
 BeginDrawing();ClearBackground({37,37,37,255});BeginMode3D(camera);
