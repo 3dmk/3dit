@@ -1771,7 +1771,20 @@ if(ImGui::Begin("Editable Polygon")){
    MeshObject& o=objects[selected];
    ImGui::Text("Object: %s",o.name.c_str());
    ImGui::SameLine();
-   ImGui::ColorEdit3("##ObjectColor",o.objectColor,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel|ImGuiColorEditFlags_NoDragDrop);
+   ImGui::PushID(selected);
+   if(ImGui::ColorButton("##ObjectColor",ImVec4(o.objectColor[0],o.objectColor[1],o.objectColor[2],1.0f),ImGuiColorEditFlags_NoTooltip,ImVec2(24,22)))
+    ImGui::OpenPopup("Object Color Picker");
+   if(ImGui::BeginPopup("Object Color Picker")){
+    ImGui::TextUnformatted("Object Color");
+    ImGui::SameLine();
+    const float closeWidth=ImGui::GetFrameHeight();
+    ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x-closeWidth);
+    if(ImGui::Button("X##CloseObjectColor",ImVec2(closeWidth,0)))ImGui::CloseCurrentPopup();
+    ImGui::Separator();
+    ImGui::ColorPicker3("##ObjectColorPicker",o.objectColor);
+    ImGui::EndPopup();
+   }
+   ImGui::PopID();
    // Compact drop-down replaces the 32-button grid.
    char selectedGroup[40];
    snprintf(selectedGroup,sizeof(selectedGroup),o.smoothingGroup==0?"0 - Flat":"%d - Smooth",o.smoothingGroup);
