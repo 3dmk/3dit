@@ -1652,7 +1652,6 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
  ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
- ImGui::DockBuilderDockWindow("Smoothing Groups",bottomLeft);
  ImGui::DockBuilderFinish(dockId);
 }
 ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
@@ -1760,6 +1759,42 @@ if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId)){
 }
 
 if(ImGui::Begin("Editable Polygon")){
+ ImGui::TextUnformatted("Object Properties");
+ if(ImGui::CollapsingHeader("Smoothing Groups",ImGuiTreeNodeFlags_DefaultOpen)){
+  ImGui::TextDisabled("Mesh submission: %.2f ms | Frame: %.1f FPS",meshDrawMs,(double)GetFPS());
+  if(selected>=0&&selected<(int)objects.size()){
+   MeshObject& o=objects[selected];
+   ImGui::Text("Object: %s",o.name.c_str());
+   ImGui::TextDisabled("Group 0 = Flat; groups 1-32 have independent smoothing values");
+   // Compact drop-down replaces the 32-button grid.
+   char selectedGroup[40];
+   snprintf(selectedGroup,sizeof(selectedGroup),o.smoothingGroup==0?"0 - Flat":"%d - Smooth",o.smoothingGroup);
+   if(ImGui::BeginCombo("Smoothing Group",selectedGroup)){
+    for(int g=0;g<=32;g++){
+     char label[40];
+     snprintf(label,sizeof(label),g==0?"0 - Flat":"%d - Smooth",g);
+     if(ImGui::Selectable(label,o.smoothingGroup==g)&&o.smoothingGroup!=g){
+      checkpoint();o.smoothingGroup=g;
+     }
+     if(o.smoothingGroup==g)ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+   }
+   if(o.smoothingGroup>0){
+    float value=o.smoothingValues[o.smoothingGroup];
+    ImGui::SetNextItemWidth(-1);
+    if(ImGui::SliderFloat("Smooth value (0-100)",&value,0.0f,100.0f,"%.0f")){
+     if(value!=o.smoothingValues[o.smoothingGroup]){checkpoint();o.smoothingValues[o.smoothingGroup]=value;}
+    }
+    ImGui::TextDisabled("0 = hard edges; 100 = fully averaged normals");
+   }
+   if(ImGui::Button("Flat Shading",ImVec2(-1,0))&&o.smoothingGroup!=0){checkpoint();o.smoothingGroup=0;}
+   if(ImGui::Button("Smooth Shading",ImVec2(-1,0))&&o.smoothingGroup==0){checkpoint();o.smoothingGroup=1;}
+   ImGui::TextWrapped("Each group has its own 0-100 smoothing strength for this object. Groups are currently object-wide.");
+  }else ImGui::TextDisabled("Select an object to edit smoothing");
+ }
+ 
+ ImGui::Separator();
  ImGui::TextUnformatted("Selection mode");
  const char* names[]={"Object","Vertex","Edge","Border","Polygon"};
  const int subModes[]={0,1,2,4,3};
@@ -1830,40 +1865,6 @@ if(ImGui::Begin("Create Objects")){
 }
 ImGui::End();
 // Material library and object assignment; viewport base color is live.
-if(ImGui::Begin("Smoothing Groups")){
- ImGui::TextDisabled("Mesh submission: %.2f ms | Frame: %.1f FPS",meshDrawMs,(double)GetFPS());
- if(selected>=0&&selected<(int)objects.size()){
-  MeshObject& o=objects[selected];
-  ImGui::Text("Object: %s",o.name.c_str());
-  ImGui::TextDisabled("Group 0 = Flat; groups 1-32 have independent smoothing values");
-  // Compact drop-down replaces the 32-button grid.
-  char selectedGroup[40];
-  snprintf(selectedGroup,sizeof(selectedGroup),o.smoothingGroup==0?"0 - Flat":"%d - Smooth",o.smoothingGroup);
-  if(ImGui::BeginCombo("Smoothing Group",selectedGroup)){
-   for(int g=0;g<=32;g++){
-    char label[40];
-    snprintf(label,sizeof(label),g==0?"0 - Flat":"%d - Smooth",g);
-    if(ImGui::Selectable(label,o.smoothingGroup==g)&&o.smoothingGroup!=g){
-     checkpoint();o.smoothingGroup=g;
-    }
-    if(o.smoothingGroup==g)ImGui::SetItemDefaultFocus();
-   }
-   ImGui::EndCombo();
-  }
-  if(o.smoothingGroup>0){
-   float value=o.smoothingValues[o.smoothingGroup];
-   ImGui::SetNextItemWidth(-1);
-   if(ImGui::SliderFloat("Smooth value (0-100)",&value,0.0f,100.0f,"%.0f")){
-    if(value!=o.smoothingValues[o.smoothingGroup]){checkpoint();o.smoothingValues[o.smoothingGroup]=value;}
-   }
-   ImGui::TextDisabled("0 = hard edges; 100 = fully averaged normals");
-  }
-  if(ImGui::Button("Flat Shading",ImVec2(-1,0))&&o.smoothingGroup!=0){checkpoint();o.smoothingGroup=0;}
-  if(ImGui::Button("Smooth Shading",ImVec2(-1,0))&&o.smoothingGroup==0){checkpoint();o.smoothingGroup=1;}
-  ImGui::TextWrapped("Each group has its own 0-100 smoothing strength for this object. Groups are currently object-wide.");
- }else ImGui::TextDisabled("Select an object to edit smoothing");
-}
-ImGui::End();
 // Freeform PBR graph workspace. Connections belong to individual named input sockets.
 if(materialsPanelOpen){
  ImGui::SetNextWindowSize(ImVec2(900,600),ImGuiCond_FirstUseEver);
@@ -2204,7 +2205,7 @@ if(materialsPanelOpen){
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Editable Polygon","Create Objects","Materials","Smoothing Groups","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Editable Polygon","Create Objects","Materials","##N3DLiteTopToolbar","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
