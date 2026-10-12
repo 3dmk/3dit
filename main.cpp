@@ -1955,10 +1955,25 @@ if(materialsPanelOpen){
    graphFeedback="Shader graph saved";
   };
   if(!hasPbr){
-   if(ImGui::Button("Add PBR_Shader",ImVec2(-1,38))){
+   // Compact material/shader icon button instead of a full-width text button.
+   if(ImGui::InvisibleButton("##AddPBRShader",ImVec2(44,44))){
     hasPbr=true;nodes.push_back({nextId++,0,ImVec2(390,80)});
    }
-   ImGui::TextDisabled("Empty graph. Add a PBR_Shader to begin.");
+   if(ImGui::IsItemHovered())ImGui::SetTooltip("Add PBR Shader");
+   {
+    ImDrawList* icons=ImGui::GetWindowDrawList();
+    ImVec2 a=ImGui::GetItemRectMin(),z=ImGui::GetItemRectMax();
+    ImU32 bg=ImGui::GetColorU32(ImGui::IsItemHovered()?ImGuiCol_ButtonHovered:ImGuiCol_Button);
+    icons->AddRectFilled(a,z,bg,6.0f);
+    icons->AddRect(a,z,IM_COL32(125,132,146,255),6.0f);
+    ImVec2 c((a.x+z.x)*0.5f,(a.y+z.y)*0.5f);
+    icons->AddCircle(c,11.0f,IM_COL32(120,196,255,255),16,2.0f);
+    icons->AddCircleFilled(c,4.0f,IM_COL32(120,196,255,255));
+    icons->AddCircleFilled(ImVec2(c.x-13,c.y-11),3.0f,IM_COL32(240,180,100,255));
+    icons->AddCircleFilled(ImVec2(c.x+13,c.y-11),3.0f,IM_COL32(240,180,100,255));
+    icons->AddLine(ImVec2(c.x-10,c.y-8),ImVec2(c.x-4,c.y-3),IM_COL32(240,180,100,255),1.5f);
+    icons->AddLine(ImVec2(c.x+10,c.y-8),ImVec2(c.x+4,c.y-3),IM_COL32(240,180,100,255),1.5f);
+   }
   }else{
    if(ImGui::Button("Assign to Selected")&&selected>=0&&selected<(int)objects.size()){
     checkpoint();
