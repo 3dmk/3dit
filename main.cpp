@@ -2037,6 +2037,20 @@ if(materialsPanelOpen){
     ImGui::PopID();
    }
   }
+  // Material template: create a fresh PBR shader graph directly from the Materials panel.
+  if(ImGui::Button("Add PBR Shader",ImVec2(170,36))){
+   nodes.clear();links.clear();
+   nodes.push_back({nextId++,0,ImVec2(390,80)});
+   hasPbr=true;
+   pbrMaterialId=-1;
+   activeMaterial=0;
+   snprintf(materialNameBuffer,sizeof(materialNameBuffer),"PBR Material");
+   connecting=-1;draggingNode=-1;selectedNode=-1;
+   graphWindowOpen=true;
+   graphFeedback="New PBR material - edit nodes and Save Material";
+  }
+  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a new PBR material from the default shader template");
+  ImGui::SameLine();
   if(ImGui::Button("Open Shader Graph"))graphWindowOpen=true;
   if(graphWindowOpen){
    ImGui::SetNextWindowSize(ImVec2(950,680),ImGuiCond_FirstUseEver);
