@@ -699,6 +699,10 @@ Vector3 planeHandlePoint(Vector3 center,int handle,float size){
  (&offset.x)[b]=size*0.39f;
  return Vector3Add(center,offset);
 }
+static int lastHighlightedHandle=-1;
+static int lastHighlightedObject=-1;
+static int lastHighlightedTool=-1;
+static Vector2 lastHighlightedPointer{};
 int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode!=0&&active(objects[selected]).empty()))return -1;Vector3 p=pivot(objects[selected]);
  Vector2 a=GetWorldToScreen(p,camera);int best=-1;float distance=16;
  if(tool==1||tool==3)for(int h=3;h<=5;h++){
@@ -1163,7 +1167,14 @@ while(!WindowShouldClose()){
    // Visible transform handles must remain pickable over the mesh.
    // Prioritize the arrow/cube endpoint, then allow component picking
    // over the thin axis shaft. Rotation rings are direct gizmo targets.
+   // In Object mode the visible gizmo has priority over mesh selection.
+   // Reuse the handle shown highlighted on the preceding render frame so
+   // the press cannot fall through to pick() on a one-frame hit-test change.
    int axis=handleHit(m);
+   if(mode==0&&axis<0&&lastHighlightedObject==selected&&lastHighlightedTool==tool
+      &&lastHighlightedHandle>=0
+      &&Vector2Distance(m,lastHighlightedPointer)<=18.0f)
+    axis=lastHighlightedHandle;
    if(axis>=0&&axis<3&&mode!=0&&tool!=2){
     Vector3 handleDirection{};(&handleDirection.x)[axis]=1.6f*gizmoSize;
     const Vector2 endpoint=GetWorldToScreen(Vector3Add(pivot(objects[selected]),handleDirection),camera);
@@ -1419,6 +1430,10 @@ if(selected>=0&&selected<(int)objects.size()){
  rlDisableDepthTest();
  Vector3 p=pivot(o);
  const int highlightedHandle=drag.active?drag.axis:(inView?handleHit(GetMousePosition()):-1);
+ lastHighlightedHandle=highlightedHandle;
+ lastHighlightedObject=selected;
+ lastHighlightedTool=tool;
+ lastHighlightedPointer=GetMousePosition();
  const Color gizmoHighlight={255,176,36,255};
  if(mode==0||!active(o).empty()){if(tool==2){
   // Rotate: three independent axis-aligned circular rings.
