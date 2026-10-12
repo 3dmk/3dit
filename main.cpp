@@ -17,7 +17,7 @@
 #include <climits>
 void ApplyN3DLiteTitlebarTheme();
 int viewportDisplayMode=0;
-struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
+struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;float objectColor[3]={0.53f,0.53f,0.53f};int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 // Live node graph preview state is independent from the ImGui panel lifetime.
@@ -1406,12 +1406,15 @@ for(int oi=0;oi<(int)objects.size();oi++){
   if(smoothShaderReady){
    const auto& mat=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
    material.shader=smoothShader;
-   SetShaderValue(smoothShader,locBase,mat.baseColor,SHADER_UNIFORM_VEC3);
+   SetShaderValue(smoothShader,locBase,o.materialId>0?mat.baseColor:o.objectColor,SHADER_UNIFORM_VEC3);
    SetShaderValue(smoothShader,locRough,&mat.roughness,SHADER_UNIFORM_FLOAT);
    SetShaderValue(smoothShader,locMetal,&mat.metallic,SHADER_UNIFORM_FLOAT);
    SetShaderValue(smoothShader,locSpec,&mat.specular,SHADER_UNIFORM_FLOAT);
    float cameraXYZ[3]={camera.position.x,camera.position.y,camera.position.z};
    SetShaderValue(smoothShader,locCamera,cameraXYZ,SHADER_UNIFORM_VEC3);
+  }
+  if(o.materialId<=0){
+   material.maps[MATERIAL_MAP_DIFFUSE].color={(unsigned char)(o.objectColor[0]*255),(unsigned char)(o.objectColor[1]*255),(unsigned char)(o.objectColor[2]*255),255};
   }
   DrawMesh(entry.mesh,material,MatrixTranslate(o.position.x,o.position.y,o.position.z));
   // Reuse the default material resources; never allocate them per draw call.
@@ -1423,8 +1426,11 @@ for(int oi=0;oi<(int)objects.size();oi++){
   const bool highlighted=oi==selected&&mode==3&&(fi==face||(rectangleObject==oi&&rectangleSelected.count(fi)>0));
   if(highlighted)for(size_t j=1;j+1<f.size();j++)
    DrawTriangle3D(world(o,f[0]),world(o,f[j]),world(o,f[j+1]),Color{215,45,50,255});
-  if(viewportDisplayMode!=0||highlighted||oi==selected&&mode!=0)for(size_t j=0;j<f.size();j++)
-   DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:viewportDisplayMode==2?Color{190,194,201,255}:Color{38,41,47,255});
+  const bool materialApplied=o.materialId>0;
+  if(viewportDisplayMode!=0||materialApplied||highlighted||oi==selected&&mode!=0)for(size_t j=0;j<f.size();j++){
+   const Color objectWire={(unsigned char)(std::clamp(o.objectColor[0],0.0f,1.0f)*255),(unsigned char)(std::clamp(o.objectColor[1],0.0f,1.0f)*255),(unsigned char)(std::clamp(o.objectColor[2],0.0f,1.0f)*255),255};
+   DrawLine3D(world(o,f[j]),world(o,f[(j+1)%f.size()]),highlighted?Color{255,92,92,255}:materialApplied?objectWire:viewportDisplayMode==2?objectWire:Color{38,41,47,255});
+  }
  }
 }
 rlDrawRenderBatchActive();
@@ -1764,6 +1770,8 @@ if(ImGui::Begin("Editable Polygon")){
   if(selected>=0&&selected<(int)objects.size()){
    MeshObject& o=objects[selected];
    ImGui::Text("Object: %s",o.name.c_str());
+   ImGui::SameLine();
+   ImGui::ColorEdit3("##ObjectColor",o.objectColor,ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel|ImGuiColorEditFlags_NoDragDrop);
    // Compact drop-down replaces the 32-button grid.
    char selectedGroup[40];
    snprintf(selectedGroup,sizeof(selectedGroup),o.smoothingGroup==0?"0 - Flat":"%d - Smooth",o.smoothingGroup);
