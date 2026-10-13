@@ -2100,7 +2100,7 @@ if(materialsPanelOpen){
    bool overPanel=false;
    for(const char* name:{"Materials","PBR Shader Graph","Editable Polygon","Create Objects","##N3DLiteTopToolbar"}){
     ImGuiWindow* win=ImGui::FindWindowByName(name);
-    if(win&&win->WasActive&&!win->Hidden&&win->Rect.Contains(mp)){overPanel=true;break;}
+    if(win&&win->WasActive&&!win->Hidden&&CheckCollisionPointRec(Vector2{mp.x,mp.y},Rectangle{win->Pos.x,win->Pos.y,win->Size.x,win->Size.y})){overPanel=true;break;}
    }
    int target=-1;float nearest=1e20f;
    if(!overPanel&&mouse.x>=0&&mouse.x<GetScreenWidth()&&mouse.y>=44&&mouse.y<GetScreenHeight()){
