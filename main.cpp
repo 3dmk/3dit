@@ -1908,12 +1908,14 @@ if(showEditPolyPanel&&selected>=0&&selected<(int)objects.size()&&objects[selecte
 ImGui::End();
 }
 
+if(selected<0||selected>=(int)objects.size()||!objects[selected].editablePoly){
 if(ImGui::Begin("Create Objects")){
  if(ImGui::Button("Box",ImVec2(-1,0))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
  if(ImGui::Button("Sphere",ImVec2(-1,0))){checkpoint();objects.push_back(sphere());selected=(int)objects.size()-1;face=-1;sub=-1;}
  if(ImGui::Button("Plane",ImVec2(-1,0))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
 }
 ImGui::End();
+}
 // Material library and object assignment; viewport base color is live.
 // Freeform PBR graph workspace. Connections belong to individual named input sockets.
 if(materialsPanelOpen){
