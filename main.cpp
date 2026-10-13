@@ -1903,7 +1903,7 @@ if(showEditPolyPanel){
  else ImGui::TextDisabled("Unavailable operations are disabled until implemented.");
 }
 ImGui::End();
-
+}
 
 if(ImGui::Begin("Create Objects")){
  if(ImGui::Button("Box",ImVec2(-1,0))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
