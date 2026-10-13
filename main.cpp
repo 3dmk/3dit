@@ -1684,8 +1684,8 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGuiID left=ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.19f,nullptr,&center);
  ImGuiID bottomLeft=left;
  ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
- ImGui::DockBuilderDockWindow("Object Tools",topLeft);
- ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
+ ImGui::DockBuilderDockWindow("Create Objects",topLeft);
+ 
  ImGui::DockBuilderFinish(dockId);
 }
 ImGui::DockSpace(dockId,ImVec2(0,0),ImGuiDockNodeFlags_PassthruCentralNode);
@@ -1793,13 +1793,8 @@ if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId)){
 }
 
 if(showEditPolyPanel){
- ImGui::SetNextWindowSize(ImVec2(320,420),ImGuiCond_FirstUseEver);
- if(ImGui::Begin("Edit Poly",&showEditPolyPanel)){
-  // Empty Edit Poly panel, reserved for upcoming tools.
- }
- ImGui::End();
-}
-if(ImGui::Begin("Object Tools")){
+ ImGui::SetNextWindowSize(ImVec2(340,520),ImGuiCond_FirstUseEver);
+ if(ImGui::Begin("Object Tools",&showEditPolyPanel)){
  ImGui::TextUnformatted("Object Properties");
  if(ImGui::CollapsingHeader("Smoothing Groups",ImGuiTreeNodeFlags_DefaultOpen)){
   if(selected>=0&&selected<(int)objects.size()){
