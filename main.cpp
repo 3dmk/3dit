@@ -1617,6 +1617,10 @@ if(openViewportContext){
  openViewportContext=false;
 }
 if(ImGui::BeginPopup("Viewport Context Menu")){
+ if(selected>=0&&selected<(int)objects.size()){
+  if(ImGui::MenuItem("Edit Poly")){mode=3;sub=-1;face=-1;ImGui::SetWindowFocus("Edit Poly");}
+  ImGui::Separator();
+ }
  if(ImGui::MenuItem("Backface Culling",nullptr,backfaceCulling))
   backfaceCulling=!backfaceCulling;
  ImGui::EndPopup();
@@ -1659,7 +1663,8 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGuiID left=ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.19f,nullptr,&center);
  ImGuiID bottomLeft=left;
  ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
- ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
+ ImGui::DockBuilderDockWindow("Edit Poly",topLeft);
+  ImGui::DockBuilderDockWindow("Modifiers",bottomLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
  ImGui::DockBuilderFinish(dockId);
 }
@@ -1767,8 +1772,20 @@ if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId)){
  overlay->AddText(origin,IM_COL32(225,225,225,255),info);
 }
 
-if(ImGui::Begin("Editable Polygon")){
- ImGui::TextUnformatted("Object Properties");
+if(ImGui::Begin("Modifiers")){
+ if(selected>=0&&selected<(int)objects.size()){
+  ImGui::Text("Object: %s",objects[selected].name.c_str());
+  ImGui::Separator();
+  ImGui::TextDisabled("Modifier stack (implementation pending)");
+  for(const char* label:{"TurboSmooth","Retopology","Decimate","Auto UVW","UVW Map"}){
+   ImGui::BulletText("%s",label);
+  }
+  ImGui::TextWrapped("Geometry processing is not yet connected. Base mesh remains unchanged.");
+ }else ImGui::TextDisabled("Select an object to view modifiers.");
+}
+ImGui::End();
+if(ImGui::Begin("Edit Poly")){
+ ImGui::TextUnformatted("Edit Poly");
  if(ImGui::CollapsingHeader("Smoothing Groups",ImGuiTreeNodeFlags_DefaultOpen)){
   if(selected>=0&&selected<(int)objects.size()){
    MeshObject& o=objects[selected];
@@ -2098,7 +2115,7 @@ if(materialsPanelOpen){
    ImVec2 mp=ImGui::GetMousePos();
    Vector2 mouse={mp.x,mp.y};
    bool overPanel=false;
-   for(const char* name:{"Materials","PBR Shader Graph","Editable Polygon","Create Objects","##N3DLiteTopToolbar"}){
+   for(const char* name:{"Materials","PBR Shader Graph","Edit Poly","Modifiers","Create Objects","##N3DLiteTopToolbar"}){
     ImGuiWindow* win=ImGui::FindWindowByName(name);
     if(win&&win->WasActive&&!win->Hidden&&CheckCollisionPointRec(Vector2{mp.x,mp.y},Rectangle{win->Pos.x,win->Pos.y,win->Size.x,win->Size.y})){overPanel=true;break;}
    }
@@ -2427,7 +2444,7 @@ if(materialsPanelOpen){
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Editable Polygon","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Edit Poly","Modifiers","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
