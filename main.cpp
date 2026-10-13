@@ -1910,9 +1910,14 @@ ImGui::End();
 
 if(selected<0||selected>=(int)objects.size()||!objects[selected].editablePoly){
 if(ImGui::Begin("Create Objects")){
- if(ImGui::Button("Box",ImVec2(-1,0))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
- if(ImGui::Button("Sphere",ImVec2(-1,0))){checkpoint();objects.push_back(sphere());selected=(int)objects.size()-1;face=-1;sub=-1;}
- if(ImGui::Button("Plane",ImVec2(-1,0))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ const float buttonHeight=32.0f;
+ const float buttonWidth=std::min(180.0f,std::max(80.0f,ImGui::GetContentRegionAvail().x));
+ const float buttonGap=9.0f;
+ if(ImGui::Button("Box",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ ImGui::Dummy(ImVec2(0,buttonGap));
+ if(ImGui::Button("Sphere",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(sphere());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ ImGui::Dummy(ImVec2(0,buttonGap));
+ if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
 }
 ImGui::End();
 }
