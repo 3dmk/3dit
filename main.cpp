@@ -1984,17 +1984,22 @@ if(materialsPanelOpen){
    }
    return out.good();
   };
-  auto saveMaterial=[&](){
+  auto saveMaterial=[&](bool asNew){
    if(!hasPbr){graphFeedback="Add a PBR shader first";return;}
-   if(pbrMaterialId<1||pbrMaterialId>=(int)materials.size()){
-    EditorMaterial m;m.name=materialNameBuffer;materials.push_back(m);pbrMaterialId=(int)materials.size()-1;
+   if(asNew||pbrMaterialId<1||pbrMaterialId>=(int)materials.size()){
+    // A new material always receives a distinct ID; editing an existing one preserves its ID.
+    EditorMaterial m;
+    if(!asNew&&pbrMaterialId>=1&&pbrMaterialId<(int)materials.size())m=materials[pbrMaterialId];
+    m.name=materialNameBuffer[0]?materialNameBuffer:"PBR Material";
+    materials.push_back(m);pbrMaterialId=(int)materials.size()-1;
    }
    if(materialNameBuffer[0])materials[pbrMaterialId].name=materialNameBuffer;
    EvaluatePbrGraph();
    auto it=std::find_if(savedPbrMaterials.begin(),savedPbrMaterials.end(),[&](const SavedPbrMaterial& v){return v.materialId==pbrMaterialId;});
    if(it==savedPbrMaterials.end())savedPbrMaterials.push_back({pbrMaterialId,nodes,links});
    else {it->nodes=nodes;it->links=links;}
-   graphFeedback=persistMaterials()?"Material saved":"Material save failed";
+   activeMaterial=pbrMaterialId;
+   graphFeedback=persistMaterials()?"Material saved to library":"Material save failed";
   };
   auto saveGraph=[&](){
    std::ofstream out("N3DLite-shader-graph.txt",std::ios::trunc);
@@ -2080,7 +2085,10 @@ if(materialsPanelOpen){
    ImGui::SetNextItemWidth(170);
    ImGui::InputText("##MaterialName",materialNameBuffer,sizeof(materialNameBuffer));
    ImGui::SameLine();
-   if(ImGui::Button("Save Material"))saveMaterial();
+   if(ImGui::Button("Save Material"))saveMaterial(false);
+   ImGui::SameLine();
+   if(ImGui::Button("Save As New"))saveMaterial(true);
+   if(ImGui::IsItemHovered())ImGui::SetTooltip("Create another independent material without replacing the current saved material");
    if(ImGui::Button("Assign to Selected")&&selected>=0&&selected<(int)objects.size()){
     checkpoint();
     if(pbrMaterialId<0||pbrMaterialId>=(int)materials.size()){
