@@ -1794,7 +1794,7 @@ if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId)){
 
 if(showEditPolyPanel){
  ImGui::SetNextWindowSize(ImVec2(340,520),ImGuiCond_FirstUseEver);
- if(ImGui::Begin("Object Tools",&showEditPolyPanel)){
+ if(ImGui::Begin("Edit Poly",&showEditPolyPanel)){
  ImGui::TextUnformatted("Object Properties");
  if(ImGui::CollapsingHeader("Smoothing Groups",ImGuiTreeNodeFlags_DefaultOpen)){
   if(selected>=0&&selected<(int)objects.size()){
@@ -2125,7 +2125,7 @@ if(materialsPanelOpen){
    ImVec2 mp=ImGui::GetMousePos();
    Vector2 mouse={mp.x,mp.y};
    bool overPanel=false;
-   for(const char* name:{"Materials","PBR Shader Graph","Object Tools","Edit Poly","Create Objects","##N3DLiteTopToolbar"}){
+   for(const char* name:{"Materials","PBR Shader Graph","Edit Poly","Edit Poly","Create Objects","##N3DLiteTopToolbar"}){
     ImGuiWindow* win=ImGui::FindWindowByName(name);
     if(win&&win->WasActive&&!win->Hidden&&CheckCollisionPointRec(Vector2{mp.x,mp.y},Rectangle{win->Pos.x,win->Pos.y,win->Size.x,win->Size.y})){overPanel=true;break;}
    }
@@ -2454,7 +2454,7 @@ if(materialsPanelOpen){
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Object Tools","Edit Poly","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Edit Poly","Edit Poly","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
