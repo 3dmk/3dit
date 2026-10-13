@@ -992,6 +992,8 @@ int connectFeedback=0;
 bool crosshairCursorHidden=false;
 bool openVertexContext=false;
 bool openViewportContext=false;
+int contextObject=-1;
+bool showEditPolyPanel=false;
 bool backfaceCulling=false;
 Vector2 rightPressPosition{};
 bool rightPressInView=false;
@@ -1257,8 +1259,23 @@ if(inView&&IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)){
  }
 }
 if(IsMouseButtonReleased(MOUSE_BUTTON_RIGHT)){
- if(rightPressInView&&!openVertexContext&&Vector2Distance(GetMousePosition(),rightPressPosition)<5.0f)
+ if(rightPressInView&&!openVertexContext&&Vector2Distance(GetMousePosition(),rightPressPosition)<5.0f){
+  contextObject=-1;
+  Ray contextRay=GetScreenToWorldRay(GetMousePosition(),camera);
+  float nearestHit=1.0e20f;
+  for(int oi=0;oi<(int)objects.size();++oi){
+   const MeshObject& obj=objects[oi];
+   for(const auto& poly:obj.faces){
+    if(poly.size()<3)continue;
+    for(size_t j=1;j+1<poly.size();++j){
+     RayCollision hit=GetRayCollisionTriangle(contextRay,world(obj,poly[0]),world(obj,poly[j]),world(obj,poly[j+1]));
+     if(!hit.hit)hit=GetRayCollisionTriangle(contextRay,world(obj,poly[0]),world(obj,poly[j+1]),world(obj,poly[j]));
+     if(hit.hit&&hit.distance<nearestHit){nearestHit=hit.distance;contextObject=oi;}
+    }
+   }
+  }
   openViewportContext=true;
+ }
  rightPressInView=false;
 }
 if(inView&&IsMouseButtonDown(MOUSE_BUTTON_RIGHT)&&!openVertexContext){
@@ -1617,6 +1634,14 @@ if(openViewportContext){
  openViewportContext=false;
 }
 if(ImGui::BeginPopup("Viewport Context Menu")){
+ if(contextObject>=0&&contextObject<(int)objects.size()){
+  if(ImGui::MenuItem("Convert to Edit Poly")){
+   selected=contextObject;
+   mode=0;sub=-1;face=-1;
+   showEditPolyPanel=true;
+  }
+  ImGui::Separator();
+ }
  if(ImGui::MenuItem("Backface Culling",nullptr,backfaceCulling))
   backfaceCulling=!backfaceCulling;
  ImGui::EndPopup();
@@ -1659,7 +1684,7 @@ if(ImGui::DockBuilderGetNode(dockId)==nullptr){
  ImGuiID left=ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.19f,nullptr,&center);
  ImGuiID bottomLeft=left;
  ImGuiID topLeft=ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.62f,nullptr,&bottomLeft);
- ImGui::DockBuilderDockWindow("Editable Polygon",topLeft);
+ ImGui::DockBuilderDockWindow("Object Tools",topLeft);
  ImGui::DockBuilderDockWindow("Create Objects",bottomLeft);
  ImGui::DockBuilderFinish(dockId);
 }
@@ -1767,7 +1792,14 @@ if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId)){
  overlay->AddText(origin,IM_COL32(225,225,225,255),info);
 }
 
-if(ImGui::Begin("Editable Polygon")){
+if(showEditPolyPanel){
+ ImGui::SetNextWindowSize(ImVec2(320,420),ImGuiCond_FirstUseEver);
+ if(ImGui::Begin("Edit Poly",&showEditPolyPanel)){
+  // Empty Edit Poly panel, reserved for upcoming tools.
+ }
+ ImGui::End();
+}
+if(ImGui::Begin("Object Tools")){
  ImGui::TextUnformatted("Object Properties");
  if(ImGui::CollapsingHeader("Smoothing Groups",ImGuiTreeNodeFlags_DefaultOpen)){
   if(selected>=0&&selected<(int)objects.size()){
@@ -2098,7 +2130,7 @@ if(materialsPanelOpen){
    ImVec2 mp=ImGui::GetMousePos();
    Vector2 mouse={mp.x,mp.y};
    bool overPanel=false;
-   for(const char* name:{"Materials","PBR Shader Graph","Editable Polygon","Create Objects","##N3DLiteTopToolbar"}){
+   for(const char* name:{"Materials","PBR Shader Graph","Object Tools","Edit Poly","Create Objects","##N3DLiteTopToolbar"}){
     ImGuiWindow* win=ImGui::FindWindowByName(name);
     if(win&&win->WasActive&&!win->Hidden&&CheckCollisionPointRec(Vector2{mp.x,mp.y},Rectangle{win->Pos.x,win->Pos.y,win->Size.x,win->Size.y})){overPanel=true;break;}
    }
@@ -2427,7 +2459,7 @@ if(materialsPanelOpen){
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Editable Polygon","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Object Tools","Edit Poly","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
