@@ -18,7 +18,7 @@
 #include <climits>
 void ApplyN3DLiteTitlebarTheme();
 int viewportDisplayMode=0;
-struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;float objectColor[3]={0.53f,0.53f,0.53f};int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
+struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;float objectColor[3]={0.53f,0.53f,0.53f};bool editablePoly=false;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 // Live node graph preview state is independent from the ImGui panel lifetime.
@@ -1096,10 +1096,10 @@ while(!WindowShouldClose()){
   }
   if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Z)){if(IsKeyDown(KEY_LEFT_SHIFT))redo();else undo();}
   if(IsKeyDown(KEY_LEFT_CONTROL)&&IsKeyPressed(KEY_Y))redo();
-  if(IsKeyPressed(KEY_ONE)){mode=1;sub=-1;face=-1;}
-  if(IsKeyPressed(KEY_TWO)){mode=2;sub=-1;face=-1;}
-  if(IsKeyPressed(KEY_THREE)){mode=3;sub=-1;face=-1;}
-  if(IsKeyPressed(KEY_FOUR)){mode=4;sub=-1;face=-1;}
+  if(selected>=0&&selected<(int)objects.size()&&objects[selected].editablePoly&&IsKeyPressed(KEY_ONE)){mode=1;sub=-1;face=-1;}
+  if(selected>=0&&selected<(int)objects.size()&&objects[selected].editablePoly&&IsKeyPressed(KEY_TWO)){mode=2;sub=-1;face=-1;}
+  if(selected>=0&&selected<(int)objects.size()&&objects[selected].editablePoly&&IsKeyPressed(KEY_THREE)){mode=3;sub=-1;face=-1;}
+  if(selected>=0&&selected<(int)objects.size()&&objects[selected].editablePoly&&IsKeyPressed(KEY_FOUR)){mode=4;sub=-1;face=-1;}
   if(IsKeyPressed(KEY_ZERO)){mode=0;sub=-1;face=-1;}
   if(IsKeyPressed(KEY_W)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=1;
   if(IsKeyPressed(KEY_E)&&!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))tool=2;
@@ -1637,6 +1637,7 @@ if(ImGui::BeginPopup("Viewport Context Menu")){
  if(contextObject>=0&&contextObject<(int)objects.size()){
   if(ImGui::MenuItem("Convert to Edit Poly")){
    selected=contextObject;
+   objects[selected].editablePoly=true;
    mode=0;sub=-1;face=-1;
    showEditPolyPanel=true;
   }
@@ -1792,7 +1793,9 @@ if(ImGuiDockNode* central=ImGui::DockBuilderGetCentralNode(dockId)){
  overlay->AddText(origin,IM_COL32(225,225,225,255),info);
 }
 
-if(showEditPolyPanel){
+if((selected<0||selected>=(int)objects.size()||!objects[selected].editablePoly)&&mode!=0){mode=0;sub=-1;face=-1;}
+
+if(showEditPolyPanel&&selected>=0&&selected<(int)objects.size()&&objects[selected].editablePoly){
  ImGui::SetNextWindowSize(ImVec2(340,520),ImGuiCond_FirstUseEver);
  if(ImGui::Begin("Edit Poly",&showEditPolyPanel)){
  ImGui::TextUnformatted("Edit Poly");
