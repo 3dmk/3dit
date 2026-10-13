@@ -2059,6 +2059,12 @@ if(materialsPanelOpen){
               (int)(std::clamp(mat.baseColor[1]*light,0.0f,1.0f)*255),
               (int)(std::clamp(mat.baseColor[2]*light,0.0f,1.0f)*255),255),40);
    }
+   if(ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)){
+    const int draggedMaterialId=saved.materialId;
+    ImGui::SetDragDropPayload("N3DLITE_MATERIAL",&draggedMaterialId,sizeof(draggedMaterialId));
+    ImGui::Text("Drag %s onto a mesh",mat.name.c_str());
+    ImGui::EndDragDropSource();
+   }
    ImGui::SameLine();
    ImGui::BeginGroup();
    ImGui::TextUnformatted(mat.name.c_str());
@@ -2081,6 +2087,49 @@ if(materialsPanelOpen){
   if(shownMaterials==0)ImGui::TextDisabled(savedPbrMaterials.empty()?"No saved materials yet. Create a PBR material to begin.":"No materials match your search.");
   ImGui::EndChild();
   ImGui::PopStyleVar();
+  // Viewport is rendered by raylib, so it needs a scene-ray drop target.
+  // Keep the payload ID until mouse release even when leaving the ImGui source.
+  static int viewportDragMaterial=-1;
+  if(const ImGuiPayload* payload=ImGui::GetDragDropPayload()){
+   if(payload->IsDataType("N3DLITE_MATERIAL")&&payload->DataSize==sizeof(int))
+    viewportDragMaterial=*(const int*)payload->Data;
+  }
+  if(viewportDragMaterial>=0){
+   ImVec2 mp=ImGui::GetMousePos();
+   Vector2 mouse={mp.x,mp.y};
+   bool overPanel=false;
+   for(const char* name:{"Materials","PBR Shader Graph","Editable Polygon","Create Objects","##N3DLiteTopToolbar"}){
+    ImGuiWindow* win=ImGui::FindWindowByName(name);
+    if(win&&win->WasActive&&!win->Hidden&&win->Rect.Contains(mp)){overPanel=true;break;}
+   }
+   int target=-1;float nearest=1e20f;
+   if(!overPanel&&mouse.x>=0&&mouse.x<GetScreenWidth()&&mouse.y>=44&&mouse.y<GetScreenHeight()){
+    Ray ray=GetScreenToWorldRay(mouse,camera);
+    for(int oi=0;oi<(int)objects.size();oi++){
+     const auto& obj=objects[oi];
+     for(const auto& poly:obj.faces){
+      if(poly.size()<3)continue;
+      for(size_t j=1;j+1<poly.size();j++){
+       RayCollision hit=GetRayCollisionTriangle(ray,world(obj,poly[0]),world(obj,poly[j]),world(obj,poly[j+1]));
+       if(!hit.hit)hit=GetRayCollisionTriangle(ray,world(obj,poly[0]),world(obj,poly[j+1]),world(obj,poly[j]));
+       if(hit.hit&&hit.distance<nearest){nearest=hit.distance;target=oi;}
+      }
+     }
+    }
+   }
+   if(target>=0){
+    ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    ImGui::GetForegroundDrawList()->AddText(ImVec2(mp.x+16,mp.y+16),IM_COL32(130,225,160,255),"Drop to apply material");
+   }
+   if(ImGui::IsMouseReleased(ImGuiMouseButton_Left)){
+    if(target>=0&&viewportDragMaterial>0&&viewportDragMaterial<(int)materials.size()){
+     checkpoint();
+     objects[target].materialId=viewportDragMaterial;
+     graphFeedback="Material applied to "+objects[target].name;
+    }
+    viewportDragMaterial=-1;
+   }else if(!ImGui::IsMouseDown(ImGuiMouseButton_Left))viewportDragMaterial=-1;
+  }
   if(graphWindowOpen){
    ImGui::SetNextWindowSize(ImVec2(950,680),ImGuiCond_FirstUseEver);
    const bool graphVisible=ImGui::Begin("PBR Shader Graph",&graphWindowOpen);
