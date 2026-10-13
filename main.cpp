@@ -1911,12 +1911,13 @@ ImGui::End();
 if(selected<0||selected>=(int)objects.size()||!objects[selected].editablePoly){
 if(ImGui::Begin("Create Objects")){
  const float buttonHeight=32.0f;
- const float buttonWidth=std::min(180.0f,std::max(80.0f,ImGui::GetContentRegionAvail().x));
- const float buttonGap=9.0f;
+ const float buttonGap=8.0f;
+ const float availableWidth=ImGui::GetContentRegionAvail().x;
+ const float buttonWidth=std::max(1.0f,(availableWidth-2.0f*buttonGap)/3.0f);
  if(ImGui::Button("Box",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
- ImGui::Dummy(ImVec2(0,buttonGap));
+ ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Sphere",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(sphere());selected=(int)objects.size()-1;face=-1;sub=-1;}
- ImGui::Dummy(ImVec2(0,buttonGap));
+ ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
 }
 ImGui::End();
