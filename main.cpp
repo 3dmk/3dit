@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iomanip>
 #include <cstdio>
+#include <cctype>
 #include <climits>
 void ApplyN3DLiteTitlebarTheme();
 int viewportDisplayMode=0;
@@ -2009,54 +2010,77 @@ if(materialsPanelOpen){
    for(const auto& l:links)out<<l.from<<" "<<l.to<<" "<<l.socket<<"\\n";
    graphFeedback="Shader graph saved";
   };
-  if(ImGui::CollapsingHeader("Saved Materials",ImGuiTreeNodeFlags_DefaultOpen)){
-   for(const auto& saved:savedPbrMaterials){
-    const EditorMaterial& mat=materials[saved.materialId];
-    ImGui::PushID(saved.materialId);
-    ImVec2 p=ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton("##MaterialPreview",ImVec2(48,48));
-    ImDrawList* dl=ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p,ImVec2(p.x+48,p.y+48),IM_COL32(33,36,42,255),4.0f);
-    for(int ring=17;ring>=1;--ring){
-     float t=(float)ring/17.0f;
-     float light=0.23f+0.77f*(1.0f-t*t);
-     dl->AddCircleFilled(ImVec2(p.x+23-(1-t)*5,p.y+24-(1-t)*5),ring,
-      IM_COL32((int)(std::clamp(mat.baseColor[0]*light,0.0f,1.0f)*255),
-               (int)(std::clamp(mat.baseColor[1]*light,0.0f,1.0f)*255),
-               (int)(std::clamp(mat.baseColor[2]*light,0.0f,1.0f)*255),255),32);
-    }
-    ImGui::SameLine();
-    ImGui::BeginGroup();
-    ImGui::TextUnformatted(mat.name.c_str());
-    if(ImGui::SmallButton("Edit")){
-     nodes=saved.nodes;links=saved.links;hasPbr=true;pbrMaterialId=saved.materialId;activeMaterial=pbrMaterialId;
-     snprintf(materialNameBuffer,sizeof(materialNameBuffer),"%s",mat.name.c_str());
-     nextId=1;for(const auto& n:nodes)nextId=std::max(nextId,n.id+1);
-     connecting=-1;draggingNode=-1;selectedNode=-1;graphWindowOpen=true;graphFeedback="Material loaded";
-    }
-    ImGui::SameLine();
-    ImGui::BeginDisabled(selected<0||selected>=(int)objects.size());
-    if(ImGui::SmallButton("Apply")){checkpoint();objects[selected].materialId=saved.materialId;}
-    ImGui::EndDisabled();
-    ImGui::EndGroup();
-    ImGui::PopID();
-   }
-  }
-  // Material template: create a fresh PBR shader graph directly from the Materials panel.
-  if(ImGui::Button("Add PBR Shader",ImVec2(170,36))){
+  // Material library layout: compact toolbar, searchable cards and consistent previews.
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,ImVec2(8,8));
+  ImGui::TextUnformatted("MATERIAL LIBRARY");
+  ImGui::SameLine();
+  ImGui::TextDisabled("%d saved",(int)savedPbrMaterials.size());
+  ImGui::Separator();
+  if(ImGui::Button("+ New PBR Material",ImVec2(174,34))){
    nodes.clear();links.clear();
    nodes.push_back({nextId++,0,ImVec2(390,80)});
-   hasPbr=true;
-   pbrMaterialId=-1;
-   activeMaterial=0;
+   hasPbr=true;pbrMaterialId=-1;activeMaterial=0;
    snprintf(materialNameBuffer,sizeof(materialNameBuffer),"PBR Material");
    connecting=-1;draggingNode=-1;selectedNode=-1;
    graphWindowOpen=true;
    graphFeedback="New PBR material - edit nodes and Save Material";
   }
-  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a new PBR material from the default shader template");
+  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a new material and open its shader graph");
   ImGui::SameLine();
-  if(ImGui::Button("Open Shader Graph"))graphWindowOpen=true;
+  if(ImGui::Button("Open Graph",ImVec2(116,34)))graphWindowOpen=true;
+  static char materialSearch[128]={};
+  ImGui::SetNextItemWidth(-1);
+  ImGui::InputTextWithHint("##SearchMaterials","Search saved materials...",materialSearch,sizeof(materialSearch));
+  ImGui::Spacing();
+  ImGui::BeginChild("##SavedMaterialLibrary",ImVec2(0,0),true);
+  int shownMaterials=0;
+  for(const auto& saved:savedPbrMaterials){
+   if(saved.materialId<0||saved.materialId>=(int)materials.size())continue;
+   const EditorMaterial& mat=materials[saved.materialId];
+   std::string label=mat.name;
+   std::string filter=materialSearch;
+   std::transform(label.begin(),label.end(),label.begin(),[](unsigned char c){return (char)std::tolower(c);});
+   std::transform(filter.begin(),filter.end(),filter.begin(),[](unsigned char c){return (char)std::tolower(c);});
+   if(!filter.empty()&&label.find(filter)==std::string::npos)continue;
+   ++shownMaterials;
+   ImGui::PushID(saved.materialId);
+   ImGui::PushStyleColor(ImGuiCol_ChildBg,ImVec4(0.17f,0.19f,0.23f,1.0f));
+   ImGui::BeginChild("##MaterialCard",ImVec2(0,102),true,ImGuiWindowFlags_NoScrollbar);
+   ImVec2 p=ImGui::GetCursorScreenPos();
+   ImGui::Dummy(ImVec2(76,76));
+   ImDrawList* dl=ImGui::GetWindowDrawList();
+   dl->AddRectFilled(p,ImVec2(p.x+76,p.y+76),IM_COL32(29,33,41,255),6.0f);
+   ImVec2 center(p.x+38,p.y+39);
+   for(int ring=29;ring>=1;--ring){
+    float t=(float)ring/29.0f;
+    float light=0.22f+0.78f*(1.0f-t*t);
+    dl->AddCircleFilled(ImVec2(center.x-(1-t)*8,center.y-(1-t)*8),ring,
+     IM_COL32((int)(std::clamp(mat.baseColor[0]*light,0.0f,1.0f)*255),
+              (int)(std::clamp(mat.baseColor[1]*light,0.0f,1.0f)*255),
+              (int)(std::clamp(mat.baseColor[2]*light,0.0f,1.0f)*255),255),40);
+   }
+   ImGui::SameLine();
+   ImGui::BeginGroup();
+   ImGui::TextUnformatted(mat.name.c_str());
+   ImGui::TextDisabled("Metallic %.2f  |  Roughness %.2f",mat.metallic,mat.roughness);
+    if(ImGui::Button("Edit Graph",ImVec2(104,26))){
+     nodes=saved.nodes;links=saved.links;hasPbr=true;pbrMaterialId=saved.materialId;activeMaterial=pbrMaterialId;
+     snprintf(materialNameBuffer,sizeof(materialNameBuffer),"%s",mat.name.c_str());
+     nextId=1;for(const auto& n:nodes)nextId=std::max(nextId,n.id+1);
+     connecting=-1;draggingNode=-1;selectedNode=-1;graphWindowOpen=true;graphFeedback="Material loaded";
+    }
+   ImGui::SameLine();
+   ImGui::BeginDisabled(selected<0||selected>=(int)objects.size());
+   if(ImGui::Button("Apply",ImVec2(72,26))){checkpoint();objects[selected].materialId=saved.materialId;}
+   ImGui::EndDisabled();
+   ImGui::EndGroup();
+   ImGui::EndChild();
+   ImGui::PopStyleColor();
+   ImGui::PopID();
+  }
+  if(shownMaterials==0)ImGui::TextDisabled(savedPbrMaterials.empty()?"No saved materials yet. Create a PBR material to begin.":"No materials match your search.");
+  ImGui::EndChild();
+  ImGui::PopStyleVar();
   if(graphWindowOpen){
    ImGui::SetNextWindowSize(ImVec2(950,680),ImGuiCond_FirstUseEver);
    const bool graphVisible=ImGui::Begin("PBR Shader Graph",&graphWindowOpen);
