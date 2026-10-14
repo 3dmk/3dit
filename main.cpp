@@ -649,7 +649,7 @@ void selectRectangle(){
  auto& o=objects[selected];
  if(rectangleObject!=selected||(!IsKeyDown(KEY_LEFT_CONTROL)&&!IsKeyDown(KEY_RIGHT_CONTROL)))rectangleSelected.clear();
  rectangleObject=selected;
- if(mode==1){for(int i=0;i<(int)o.vertices.size();i++)if(rectangleContains(GetWorldToScreen(world(o,i),camera)))rectangleSelected.insert(i);}
+ if(mode==1){for(int i=0;i<(int)o.vertices.size();i++)if(vertexVisibleFromCamera(o,i)&&rectangleContains(GetWorldToScreen(world(o,i),camera)))rectangleSelected.insert(i);}
  if(mode==2||mode==4){
   auto e=edges(o);
   for(int i=0;i<(int)e.size();i++){
@@ -740,6 +740,26 @@ int handleHit(Vector2 mouse){if(selected<0||selected>=(int)objects.size()||(mode
  }
  return best;
 }
+// Hide vertex handles occluded by the selected mesh, independently of GPU culling.
+bool vertexVisibleFromCamera(const MeshObject& o,int vertexIndex){
+ if(vertexIndex<0||vertexIndex>=(int)o.vertices.size())return false;
+ const Vector3 target=world(o,vertexIndex);
+ const Vector3 delta=Vector3Subtract(target,camera.position);
+ const float distance=Vector3Length(delta);
+ if(distance<0.0001f)return true;
+ Ray ray{camera.position,Vector3Scale(delta,1.0f/distance)};
+ const float tolerance=std::max(0.0005f,distance*0.0001f);
+ for(const auto& polygon:o.faces){
+  if(polygon.size()<3)continue;
+  for(size_t j=1;j+1<polygon.size();++j){
+   const Vector3 a=world(o,polygon[0]),b=world(o,polygon[j]),c=world(o,polygon[j+1]);
+   RayCollision hit=GetRayCollisionTriangle(ray,a,b,c);
+   if(!hit.hit)hit=GetRayCollisionTriangle(ray,a,c,b);
+   if(hit.hit&&hit.distance<distance-tolerance)return false;
+  }
+ }
+ return true;
+}
 void pickComponent(Vector2 mouse){
  if(selected<0||selected>=(int)objects.size())return;
  if(mode==3){Ray ray=GetScreenToWorldRay(mouse,camera);float nearest=1e20f;int hit=-1;const auto& o=objects[selected];for(int fi=0;fi<(int)o.faces.size();fi++){const auto& f=o.faces[fi];for(size_t j=1;j+1<f.size();j++){auto collision=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j]),world(o,f[j+1]));if(!collision.hit)collision=GetRayCollisionTriangle(ray,world(o,f[0]),world(o,f[j+1]),world(o,f[j]));if(collision.hit&&collision.distance<nearest){nearest=collision.distance;hit=fi;}}}face=hit;sub=hit;return;}
@@ -747,6 +767,7 @@ void pickComponent(Vector2 mouse){
  sub=-1;auto& o=objects[selected];
  float best=16.0f;
  if(mode==1){for(int i=0;i<(int)o.vertices.size();i++){
+  if(!vertexVisibleFromCamera(o,i))continue;
   float d=Vector2Distance(mouse,GetWorldToScreen(world(o,i),camera));
   if(d<best){best=d;sub=i;}
  }}
@@ -1577,6 +1598,7 @@ if(mode==1&&selected>=0&&selected<(int)objects.size()){
  const auto& o=objects[selected];
  BeginScissorMode(186,43,std::max(1,w-417),std::max(1,h-70));
  for(int i=0;i<(int)o.vertices.size();i++){
+  if(!vertexVisibleFromCamera(o,i))continue;
   Vector3 point=world(o,i);
   // Ignore vertices behind the camera.
   Vector3 forward=Vector3Subtract(camera.target,camera.position);
