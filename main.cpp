@@ -18,7 +18,7 @@
 #include <climits>
 void ApplyN3DLiteTitlebarTheme();
 int viewportDisplayMode=0;
-struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;float objectColor[3]={0.53f,0.53f,0.53f};bool editablePoly=false;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
+struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;float objectColor[3]={0.53f,0.53f,0.53f};bool editablePoly=false;int primitiveType=0;float primitiveLength=2.0f,primitiveWidth=2.0f,primitiveHeight=2.0f;int primitiveSides=24;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 // Live node graph preview state is independent from the ImGui panel lifetime.
@@ -1910,9 +1910,18 @@ ImGui::End();
 
 if(selected<0||selected>=(int)objects.size()||!objects[selected].editablePoly){
 if(ImGui::Begin("Create Objects")){
+ static int lastPrimitiveSelection=-2;
  static float createLength=2.0f,createWidth=2.0f,createHeight=2.0f;
  static int createSides=24;
- ImGui::TextUnformatted("Primitive Properties");
+ const bool editingPrimitive=selected>=0&&selected<(int)objects.size()&&!objects[selected].editablePoly&&objects[selected].primitiveType!=0;
+ if(lastPrimitiveSelection!=selected){
+  lastPrimitiveSelection=selected;
+  if(editingPrimitive){
+   const MeshObject& o=objects[selected];
+   createLength=o.primitiveLength;createWidth=o.primitiveWidth;createHeight=o.primitiveHeight;createSides=o.primitiveSides;
+  }
+ }
+ ImGui::TextUnformatted(editingPrimitive?"Selected Primitive Properties":"Primitive Properties");
  ImGui::TextDisabled("Set dimensions before creating a primitive.");
  ImGui::TextDisabled("Hover a field or shape for its description.");
  const float propertyFieldWidth=std::min(85.0f,std::max(55.0f,ImGui::GetContentRegionAvail().x*0.35f));
@@ -1925,20 +1934,35 @@ if(ImGui::Begin("Create Objects")){
  };
  propertyLabel("Length");
  ImGui::DragFloat("##CreateLength", &createLength,0.05f,0.01f,10000.0f,"%.2f");
+ if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Size along the X axis.");
  propertyLabel("Width");
  ImGui::DragFloat("##CreateWidth", &createWidth,0.05f,0.01f,10000.0f,"%.2f");
+ if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Size along the Y axis.");
  propertyLabel("Height");
  ImGui::DragFloat("##CreateHeight", &createHeight,0.05f,0.01f,10000.0f,"%.2f");
+ if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Size along the Z axis. Not used by Plane.");
  propertyLabel("Sides");
  ImGui::DragInt("##CreateSides", &createSides,1,3,128);
+ if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Sphere circumference segments (3-128). Not used by Box or Plane.");
  createLength=std::clamp(createLength,0.01f,10000.0f);
  createWidth=std::clamp(createWidth,0.01f,10000.0f);
  createHeight=std::clamp(createHeight,0.01f,10000.0f);
  createSides=std::clamp(createSides,3,128);
+ if(editingPrimitive){
+  MeshObject& current=objects[selected];
+  if(current.primitiveLength!=createLength||current.primitiveWidth!=createWidth||current.primitiveHeight!=createHeight||current.primitiveSides!=createSides){
+   MeshObject rebuilt=current.primitiveType==1?box():(current.primitiveType==2?sphere(createSides):plane());
+   for(auto& v:rebuilt.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;if(current.primitiveType!=3)v.z*=createHeight*0.5f;}
+   current.vertices=std::move(rebuilt.vertices);
+   current.faces=std::move(rebuilt.faces);
+   current.primitiveLength=createLength;current.primitiveWidth=createWidth;current.primitiveHeight=createHeight;current.primitiveSides=createSides;
+   face=-1;sub=-1;
+  }
+ }
  ImGui::Separator();
  ImGui::TextUnformatted("Create Primitives");
  ImGui::Spacing();
@@ -1947,21 +1971,21 @@ if(ImGui::Begin("Create Objects")){
  const float availableWidth=ImGui::GetContentRegionAvail().x;
  const float buttonWidth=std::max(1.0f,(availableWidth-2.0f*buttonGap)/3.0f);
  if(ImGui::Button("Box",ImVec2(buttonWidth,buttonHeight))){
-  checkpoint();MeshObject o=box();
+  checkpoint();MeshObject o=box();o.primitiveType=1;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a six-faced box using Length, Width and Height.");
  ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Sphere",ImVec2(buttonWidth,buttonHeight))){
-  checkpoint();MeshObject o=sphere(createSides);
+  checkpoint();MeshObject o=sphere(createSides);o.primitiveType=2;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a segmented sphere or ellipsoid using dimensions and Sides.");
  ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){
-  checkpoint();MeshObject o=plane();
+  checkpoint();MeshObject o=plane();o.primitiveType=3;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
