@@ -1913,6 +1913,8 @@ if(ImGui::Begin("Create Objects")){
  static float createLength=2.0f,createWidth=2.0f,createHeight=2.0f;
  static int createSides=24;
  ImGui::TextUnformatted("Primitive Properties");
+ ImGui::TextDisabled("Set dimensions before creating a primitive.");
+ ImGui::TextDisabled("Hover a field or shape for its description.");
  const float propertyFieldWidth=std::min(85.0f,std::max(55.0f,ImGui::GetContentRegionAvail().x*0.35f));
  const float propertyLabelWidth=ImGui::CalcTextSize("Length").x+12.0f;
  auto propertyLabel=[&](const char* label){
@@ -1923,12 +1925,16 @@ if(ImGui::Begin("Create Objects")){
  };
  propertyLabel("Length");
  ImGui::DragFloat("##CreateLength", &createLength,0.05f,0.01f,10000.0f,"%.2f");
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Size along the X axis.");
  propertyLabel("Width");
  ImGui::DragFloat("##CreateWidth", &createWidth,0.05f,0.01f,10000.0f,"%.2f");
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Size along the Y axis.");
  propertyLabel("Height");
  ImGui::DragFloat("##CreateHeight", &createHeight,0.05f,0.01f,10000.0f,"%.2f");
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Size along the Z axis. Not used by Plane.");
  propertyLabel("Sides");
  ImGui::DragInt("##CreateSides", &createSides,1,3,128);
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Sphere circumference segments (3-128). Not used by Box or Plane.");
  createLength=std::clamp(createLength,0.01f,10000.0f);
  createWidth=std::clamp(createWidth,0.01f,10000.0f);
  createHeight=std::clamp(createHeight,0.01f,10000.0f);
@@ -1943,19 +1949,25 @@ if(ImGui::Begin("Create Objects")){
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a six-faced box using Length, Width and Height.");
  ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Sphere",ImVec2(buttonWidth,buttonHeight))){
   checkpoint();MeshObject o=sphere(createSides);
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a segmented sphere or ellipsoid using dimensions and Sides.");
  ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){
   checkpoint();MeshObject o=plane();
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
- ImGui::TextDisabled("Sides controls sphere segments; plane uses Length and Width.");
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a flat XY plane using Length and Width; Height and Sides are ignored.");
+ ImGui::Separator();
+ ImGui::TextWrapped("Box: Six-sided solid with adjustable dimensions.");
+ ImGui::TextWrapped("Sphere: Rounded primitive; Sides controls its resolution.");
+ ImGui::TextWrapped("Plane: Flat surface on XY; Length and Width only.");
 }
 ImGui::End();
 }
