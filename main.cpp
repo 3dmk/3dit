@@ -18,7 +18,7 @@
 #include <climits>
 void ApplyN3DLiteTitlebarTheme();
 int viewportDisplayMode=0;
-struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;float objectColor[3]={0.53f,0.53f,0.53f};bool editablePoly=false;int primitiveType=0;float primitiveLength=2.0f,primitiveWidth=2.0f,primitiveHeight=2.0f;int primitiveSides=24;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
+struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;float objectColor[3]={0.53f,0.53f,0.53f};bool editablePoly=false;int primitiveType=0;float primitiveLength=2.0f,primitiveWidth=2.0f,primitiveHeight=2.0f;int primitiveSides=24;int segmentsX=1,segmentsY=1,segmentsZ=1,segmentsHeight=12;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 // Live node graph preview state is independent from the ImGui panel lifetime.
@@ -178,14 +178,50 @@ auto disposeGpu=[](GpuEntry& e){
 void checkpoint(){undoStack.push_back({objects,selected,face,sub});if(undoStack.size()>80)undoStack.erase(undoStack.begin());redoStack.clear();}
 void undo(){if(undoStack.empty())return;redoStack.push_back({objects,selected,face,sub});auto s=undoStack.back();undoStack.pop_back();objects=s.objects;selected=s.selected;face=s.face;sub=s.sub;}
 void redo(){if(redoStack.empty())return;undoStack.push_back({objects,selected,face,sub});auto s=redoStack.back();redoStack.pop_back();objects=s.objects;selected=s.selected;face=s.face;sub=s.sub;}
-MeshObject box(){return {"Box",{{-1,-1,-1},{1,-1,-1},{1,1,-1},{-1,1,-1},{-1,-1,1},{1,-1,1},{1,1,1},{-1,1,1}},{{0,3,2,1},{4,5,6,7},{0,1,5,4},{1,2,6,5},{2,3,7,6},{3,0,4,7}}};}
-MeshObject plane(){return {"Plane",{{-1,-1,0},{1,-1,0},{1,1,0},{-1,1,0}},{{0,1,2,3}}};}
-MeshObject sphere(int sides=24){
+MeshObject box(int sx=1,int sy=1,int sz=1){
+ MeshObject o;o.name="Box";sx=std::clamp(sx,1,64);sy=std::clamp(sy,1,64);sz=std::clamp(sz,1,64);
+ std::map<std::tuple<int,int,int>,int> ids;
+ auto vertex=[&](int x,int y,int z){
+  auto key=std::make_tuple(x,y,z);auto it=ids.find(key);if(it!=ids.end())return it->second;
+  int id=(int)o.vertices.size();ids[key]=id;
+  o.vertices.push_back({-1.0f+2.0f*x/sx,-1.0f+2.0f*y/sy,-1.0f+2.0f*z/sz});return id;
+ };
+ auto quad=[&](int a,int b,int c,int d){
+  std::vector<int> face={a,b,c,d};
+  const Vector3 p=o.vertices[a],q=o.vertices[b],r=o.vertices[c];
+  Vector3 n=Vector3CrossProduct(Vector3Subtract(q,p),Vector3Subtract(r,p));
+  Vector3 center=Vector3Scale(Vector3Add(Vector3Add(Vector3Add(p,q),r),o.vertices[d]),0.25f);
+  if(Vector3DotProduct(n,center)<0)std::reverse(face.begin(),face.end());
+  o.faces.push_back(std::move(face));
+ };
+ for(int x=0;x<sx;x++)for(int y=0;y<sy;y++){
+  quad(vertex(x,y,0),vertex(x+1,y,0),vertex(x+1,y+1,0),vertex(x,y+1,0));
+  quad(vertex(x,y,sz),vertex(x+1,y,sz),vertex(x+1,y+1,sz),vertex(x,y+1,sz));
+ }
+ for(int x=0;x<sx;x++)for(int z=0;z<sz;z++){
+  quad(vertex(x,0,z),vertex(x+1,0,z),vertex(x+1,0,z+1),vertex(x,0,z+1));
+  quad(vertex(x,sy,z),vertex(x+1,sy,z),vertex(x+1,sy,z+1),vertex(x,sy,z+1));
+ }
+ for(int y=0;y<sy;y++)for(int z=0;z<sz;z++){
+  quad(vertex(0,y,z),vertex(0,y+1,z),vertex(0,y+1,z+1),vertex(0,y,z+1));
+  quad(vertex(sx,y,z),vertex(sx,y+1,z),vertex(sx,y+1,z+1),vertex(sx,y,z+1));
+ }
+ return o;
+}
+MeshObject plane(int sx=1,int sy=1){
+ MeshObject o;o.name="Plane";sx=std::clamp(sx,1,64);sy=std::clamp(sy,1,64);
+ for(int y=0;y<=sy;y++)for(int x=0;x<=sx;x++)
+  o.vertices.push_back({-1.0f+2.0f*x/sx,-1.0f+2.0f*y/sy,0});
+ for(int y=0;y<sy;y++)for(int x=0;x<sx;x++){
+  int a=y*(sx+1)+x;
+  o.faces.push_back({a,a+1,a+sx+2,a+sx+1});
+ }
+ return o;
+}
+MeshObject sphere(int sides=24,int heightSegments=12){
  MeshObject o;o.name="Sphere";
- const int N=std::clamp(sides,3,128),R=std::max(3,N/2);
- // Single pole vertices avoid zero-area faces; rings have outward winding.
- const int top=0;
- o.vertices.push_back({0,0,1});
+ const int N=std::clamp(sides,3,128),R=std::clamp(heightSegments,2,64);
+ const int top=0;o.vertices.push_back({0,0,1});
  for(int j=1;j<R;j++){
   const float p=PI*j/R;
   for(int i=0;i<N;i++){
@@ -193,14 +229,12 @@ MeshObject sphere(int sides=24){
    o.vertices.push_back({sinf(p)*cosf(t),sinf(p)*sinf(t),cosf(p)});
   }
  }
- const int bottom=(int)o.vertices.size();
- o.vertices.push_back({0,0,-1});
+ const int bottom=(int)o.vertices.size();o.vertices.push_back({0,0,-1});
  auto ring=[&](int j,int i){return 1+(j-1)*N+(i+N)%N;};
  for(int i=0;i<N;i++)o.faces.push_back({top,ring(1,i),ring(1,i+1)});
  for(int j=1;j<R-1;j++)for(int i=0;i<N;i++)
   o.faces.push_back({ring(j,i),ring(j+1,i),ring(j+1,i+1),ring(j,i+1)});
  for(int i=0;i<N;i++)o.faces.push_back({ring(R-1,i),bottom,ring(R-1,i+1)});
- // Validate orientation against the sphere center rather than relying on winding guesses.
  for(auto& face:o.faces){
   Vector3 a=o.vertices[face[0]],b=o.vertices[face[1]],c=o.vertices[face[2]];
   Vector3 n=Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a));
@@ -1935,13 +1969,13 @@ if(selected<0||selected>=(int)objects.size()||!objects[selected].editablePoly){
 if(ImGui::Begin("Create Objects")){
  static int lastPrimitiveSelection=-2;
  static float createLength=2.0f,createWidth=2.0f,createHeight=2.0f;
- static int createSides=24;
+ static int createSides=24,createSegX=1,createSegY=1,createSegZ=1,createSegHeight=12;
  const bool editingPrimitive=selected>=0&&selected<(int)objects.size()&&!objects[selected].editablePoly&&objects[selected].primitiveType!=0;
  if(lastPrimitiveSelection!=selected){
   lastPrimitiveSelection=selected;
   if(editingPrimitive){
    const MeshObject& o=objects[selected];
-   createLength=o.primitiveLength;createWidth=o.primitiveWidth;createHeight=o.primitiveHeight;createSides=o.primitiveSides;
+   createLength=o.primitiveLength;createWidth=o.primitiveWidth;createHeight=o.primitiveHeight;createSides=o.primitiveSides;createSegX=o.segmentsX;createSegY=o.segmentsY;createSegZ=o.segmentsZ;createSegHeight=o.segmentsHeight;
   }
  }
  ImGui::TextUnformatted(editingPrimitive?"Selected Primitive Properties":"Primitive Properties");
@@ -1973,18 +2007,37 @@ if(ImGui::Begin("Create Objects")){
  ImGui::DragInt("##CreateSides", &createSides,1,3,128);
  if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Sphere circumference segments (3-128). Not used by Box or Plane.");
+ ImGui::Separator();
+ ImGui::TextUnformatted("Segments");
+ const int currentType=editingPrimitive?objects[selected].primitiveType:0;
+ if(currentType!=2){
+  propertyLabel("X Segments");ImGui::DragInt("##SegX",&createSegX,1,1,64);
+  if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
+  propertyLabel("Y Segments");ImGui::DragInt("##SegY",&createSegY,1,1,64);
+  if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
+ }
+ if(currentType==1||currentType==0){
+  propertyLabel("Z Segments");ImGui::DragInt("##SegZ",&createSegZ,1,1,64);
+  if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
+ }
+ if(currentType==2||currentType==0){
+  propertyLabel("Height Seg.");ImGui::DragInt("##SegHeight",&createSegHeight,1,2,64);
+  if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
+ }
+ createSegX=std::clamp(createSegX,1,64);createSegY=std::clamp(createSegY,1,64);
+ createSegZ=std::clamp(createSegZ,1,64);createSegHeight=std::clamp(createSegHeight,2,64);
  createLength=std::clamp(createLength,0.01f,10000.0f);
  createWidth=std::clamp(createWidth,0.01f,10000.0f);
  createHeight=std::clamp(createHeight,0.01f,10000.0f);
  createSides=std::clamp(createSides,3,128);
  if(editingPrimitive){
   MeshObject& current=objects[selected];
-  if(current.primitiveLength!=createLength||current.primitiveWidth!=createWidth||current.primitiveHeight!=createHeight||current.primitiveSides!=createSides){
-   MeshObject rebuilt=current.primitiveType==1?box():(current.primitiveType==2?sphere(createSides):plane());
+  if(current.primitiveLength!=createLength||current.primitiveWidth!=createWidth||current.primitiveHeight!=createHeight||current.primitiveSides!=createSides||current.segmentsX!=createSegX||current.segmentsY!=createSegY||current.segmentsZ!=createSegZ||current.segmentsHeight!=createSegHeight){
+   MeshObject rebuilt=current.primitiveType==1?box(createSegX,createSegY,createSegZ):(current.primitiveType==2?sphere(createSides,createSegHeight):plane(createSegX,createSegY));
    for(auto& v:rebuilt.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;if(current.primitiveType!=3)v.z*=createHeight*0.5f;}
    current.vertices=std::move(rebuilt.vertices);
    current.faces=std::move(rebuilt.faces);
-   current.primitiveLength=createLength;current.primitiveWidth=createWidth;current.primitiveHeight=createHeight;current.primitiveSides=createSides;
+   current.primitiveLength=createLength;current.primitiveWidth=createWidth;current.primitiveHeight=createHeight;current.primitiveSides=createSides;current.segmentsX=createSegX;current.segmentsY=createSegY;current.segmentsZ=createSegZ;current.segmentsHeight=createSegHeight;
    face=-1;sub=-1;
   }
  }
@@ -1996,21 +2049,21 @@ if(ImGui::Begin("Create Objects")){
  const float availableWidth=ImGui::GetContentRegionAvail().x;
  const float buttonWidth=std::max(1.0f,(availableWidth-2.0f*buttonGap)/3.0f);
  if(ImGui::Button("Box",ImVec2(buttonWidth,buttonHeight))){
-  checkpoint();MeshObject o=box();o.primitiveType=1;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;
+  checkpoint();MeshObject o=box(createSegX,createSegY,createSegZ);o.primitiveType=1;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;o.segmentsX=createSegX;o.segmentsY=createSegY;o.segmentsZ=createSegZ;o.segmentsHeight=createSegHeight;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a six-faced box using Length, Width and Height.");
  ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Sphere",ImVec2(buttonWidth,buttonHeight))){
-  checkpoint();MeshObject o=sphere(createSides);o.primitiveType=2;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;
+  checkpoint();MeshObject o=sphere(createSides,createSegHeight);o.primitiveType=2;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;o.segmentsX=createSegX;o.segmentsY=createSegY;o.segmentsZ=createSegZ;o.segmentsHeight=createSegHeight;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a segmented sphere or ellipsoid using dimensions and Sides.");
  ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){
-  checkpoint();MeshObject o=plane();o.primitiveType=3;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;
+  checkpoint();MeshObject o=plane(createSegX,createSegY);o.primitiveType=3;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;o.segmentsX=createSegX;o.segmentsY=createSegY;o.segmentsZ=createSegZ;o.segmentsHeight=createSegHeight;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
