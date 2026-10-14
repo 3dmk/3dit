@@ -180,9 +180,9 @@ void undo(){if(undoStack.empty())return;redoStack.push_back({objects,selected,fa
 void redo(){if(redoStack.empty())return;undoStack.push_back({objects,selected,face,sub});auto s=redoStack.back();redoStack.pop_back();objects=s.objects;selected=s.selected;face=s.face;sub=s.sub;}
 MeshObject box(){return {"Box",{{-1,-1,-1},{1,-1,-1},{1,1,-1},{-1,1,-1},{-1,-1,1},{1,-1,1},{1,1,1},{-1,1,1}},{{0,3,2,1},{4,5,6,7},{0,1,5,4},{1,2,6,5},{2,3,7,6},{3,0,4,7}}};}
 MeshObject plane(){return {"Plane",{{-1,-1,0},{1,-1,0},{1,1,0},{-1,1,0}},{{0,1,2,3}}};}
-MeshObject sphere(){
+MeshObject sphere(int sides=24){
  MeshObject o;o.name="Sphere";
- constexpr int N=24,R=12;
+ const int N=std::clamp(sides,3,128),R=std::max(3,N/2);
  // Single pole vertices avoid zero-area faces; rings have outward winding.
  const int top=0;
  o.vertices.push_back({0,0,1});
@@ -1910,15 +1910,44 @@ ImGui::End();
 
 if(selected<0||selected>=(int)objects.size()||!objects[selected].editablePoly){
 if(ImGui::Begin("Create Objects")){
+ static float createLength=2.0f,createWidth=2.0f,createHeight=2.0f;
+ static int createSides=24;
+ ImGui::TextUnformatted("Primitive Properties");
+ ImGui::SetNextItemWidth(-1);
+ ImGui::DragFloat("Length##Create", &createLength,0.05f,0.01f,10000.0f,"%.2f");
+ ImGui::SetNextItemWidth(-1);
+ ImGui::DragFloat("Width##Create", &createWidth,0.05f,0.01f,10000.0f,"%.2f");
+ ImGui::SetNextItemWidth(-1);
+ ImGui::DragFloat("Height##Create", &createHeight,0.05f,0.01f,10000.0f,"%.2f");
+ ImGui::SetNextItemWidth(-1);
+ ImGui::DragInt("Sides##Create", &createSides,1,3,128);
+ createLength=std::clamp(createLength,0.01f,10000.0f);
+ createWidth=std::clamp(createWidth,0.01f,10000.0f);
+ createHeight=std::clamp(createHeight,0.01f,10000.0f);
+ createSides=std::clamp(createSides,3,128);
+ ImGui::Separator();
  const float buttonHeight=32.0f;
  const float buttonGap=8.0f;
  const float availableWidth=ImGui::GetContentRegionAvail().x;
  const float buttonWidth=std::max(1.0f,(availableWidth-2.0f*buttonGap)/3.0f);
- if(ImGui::Button("Box",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(box());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ if(ImGui::Button("Box",ImVec2(buttonWidth,buttonHeight))){
+  checkpoint();MeshObject o=box();
+  for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
+  objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
+ }
  ImGui::SameLine(0,buttonGap);
- if(ImGui::Button("Sphere",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(sphere());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ if(ImGui::Button("Sphere",ImVec2(buttonWidth,buttonHeight))){
+  checkpoint();MeshObject o=sphere(createSides);
+  for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
+  objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
+ }
  ImGui::SameLine(0,buttonGap);
- if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){checkpoint();objects.push_back(plane());selected=(int)objects.size()-1;face=-1;sub=-1;}
+ if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){
+  checkpoint();MeshObject o=plane();
+  for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;}
+  objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
+ }
+ ImGui::TextDisabled("Sides controls sphere segments; plane uses Length and Width.");
 }
 ImGui::End();
 }
