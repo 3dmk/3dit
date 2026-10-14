@@ -1940,6 +1940,8 @@ if(ImGui::Begin("Create Objects")){
  createHeight=std::clamp(createHeight,0.01f,10000.0f);
  createSides=std::clamp(createSides,3,128);
  ImGui::Separator();
+ ImGui::TextUnformatted("Create Primitives");
+ ImGui::Spacing();
  const float buttonHeight=32.0f;
  const float buttonGap=8.0f;
  const float availableWidth=ImGui::GetContentRegionAvail().x;
