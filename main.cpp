@@ -987,7 +987,7 @@ ImGui::StyleColorsDark();
  c[ImGuiCol_NavHighlight]=ImVec4(.65f,.65f,.65f,.8f);
 }
 if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFontLoaded=uiFont.texture.id!=0;}
-camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45.0f;camera.projection=CAMERA_PERSPECTIVE;objects.push_back(box());selected=0;
+camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45.0f;camera.projection=CAMERA_PERSPECTIVE;{ MeshObject initial=box();initial.primitiveType=1;objects.push_back(std::move(initial));selected=0; }
 int connectFeedback=0;
 bool crosshairCursorHidden=false;
 bool openVertexContext=false;
@@ -1922,7 +1922,9 @@ if(ImGui::Begin("Create Objects")){
   }
  }
  ImGui::TextUnformatted(editingPrimitive?"Selected Primitive Properties":"Primitive Properties");
- ImGui::TextDisabled("Set dimensions before creating a primitive.");
+ if(selected>=0&&selected<(int)objects.size()&&!objects[selected].editablePoly&&!editingPrimitive)
+  ImGui::TextDisabled("This object has no primitive parameters; create a new primitive to edit dimensions.");
+ ImGui::TextDisabled(editingPrimitive?"Change values to resize the selected object.":"Set dimensions before creating a primitive.");
  ImGui::TextDisabled("Hover a field or shape for its description.");
  const float propertyFieldWidth=std::min(85.0f,std::max(55.0f,ImGui::GetContentRegionAvail().x*0.35f));
  const float propertyLabelWidth=ImGui::CalcTextSize("Length").x+12.0f;
