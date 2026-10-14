@@ -1913,13 +1913,14 @@ if(ImGui::Begin("Create Objects")){
  static float createLength=2.0f,createWidth=2.0f,createHeight=2.0f;
  static int createSides=24;
  ImGui::TextUnformatted("Primitive Properties");
- ImGui::SetNextItemWidth(-1);
+ const float propertyFieldWidth=std::min(110.0f,std::max(65.0f,ImGui::GetContentRegionAvail().x*0.45f));
+ ImGui::SetNextItemWidth(propertyFieldWidth);
  ImGui::DragFloat("Length##Create", &createLength,0.05f,0.01f,10000.0f,"%.2f");
- ImGui::SetNextItemWidth(-1);
+ ImGui::SetNextItemWidth(propertyFieldWidth);
  ImGui::DragFloat("Width##Create", &createWidth,0.05f,0.01f,10000.0f,"%.2f");
- ImGui::SetNextItemWidth(-1);
+ ImGui::SetNextItemWidth(propertyFieldWidth);
  ImGui::DragFloat("Height##Create", &createHeight,0.05f,0.01f,10000.0f,"%.2f");
- ImGui::SetNextItemWidth(-1);
+ ImGui::SetNextItemWidth(propertyFieldWidth);
  ImGui::DragInt("Sides##Create", &createSides,1,3,128);
  createLength=std::clamp(createLength,0.01f,10000.0f);
  createWidth=std::clamp(createWidth,0.01f,10000.0f);
