@@ -1046,6 +1046,7 @@ if(FileExists("Roboto.ttf")){uiFont=LoadFontEx("Roboto.ttf",32,nullptr,0);uiFont
 camera.position={7,-9,7};camera.target={0,0,0};camera.up={0,0,1};camera.fovy=45.0f;camera.projection=CAMERA_PERSPECTIVE;{ MeshObject initial=box();initial.primitiveType=1;objects.push_back(std::move(initial));selected=0; }
 int connectFeedback=0;
 bool crosshairCursorHidden=false;
+bool contextMenuActive=false;
 bool openVertexContext=false;
 bool openViewportContext=false;
 int contextObject=-1;
@@ -1675,8 +1676,7 @@ if(inView && !drag.active){
 // Native cursor must remain visible for right-click menus and camera navigation.
 bool contextMenuPending=openViewportContext||openVertexContext;
 bool showCrosshair=inView && !drag.active && !IsMouseButtonDown(MOUSE_BUTTON_RIGHT) &&
- !contextMenuPending && !ImGui::IsPopupOpen("Viewport Context Menu",ImGuiPopupFlags_AnyPopupLevel) &&
- !ImGui::IsPopupOpen("Vertex Context Menu",ImGuiPopupFlags_AnyPopupLevel) &&
+ !contextMenuPending && !contextMenuActive &&
  (cursorOnActor || handleHit(GetMousePosition())>=0);
 if(showCrosshair && !crosshairCursorHidden){HideCursor();crosshairCursorHidden=true;}
 else if(!showCrosshair && crosshairCursorHidden){ShowCursor();crosshairCursorHidden=false;}
@@ -1691,12 +1691,14 @@ if(showCrosshair){
  DrawCircleV(cursor,1.5f,ink);
 }
 rlImGuiBegin();
+contextMenuActive=false;
 if(openViewportContext){
  if(crosshairCursorHidden){ShowCursor();crosshairCursorHidden=false;}
  ImGui::OpenPopup("Viewport Context Menu");
  openViewportContext=false;
 }
 if(ImGui::BeginPopup("Viewport Context Menu")){
+ contextMenuActive=true;
  if(contextObject>=0&&contextObject<(int)objects.size()){
   if(ImGui::MenuItem("Convert to Edit Poly")){
    selected=contextObject;
@@ -1716,6 +1718,7 @@ if(openVertexContext){
  openVertexContext=false;
 }
 if(ImGui::BeginPopup("Vertex Context Menu")){
+ contextMenuActive=true;
  const bool canEdit=mode==1&&validComponent()&&sub>=0&&sub<(int)objects[selected].vertices.size();
  ImGui::BeginDisabled(!canEdit);
  if(ImGui::MenuItem("Target Weld"))armTargetWeld();
