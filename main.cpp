@@ -1672,7 +1672,12 @@ if(inView && !drag.active){
  }
 }
 // Screen-space cursor crosshair: always above scene geometry, but below UI panels.
-bool showCrosshair=inView && !drag.active && (cursorOnActor || handleHit(GetMousePosition())>=0);
+// Native cursor must remain visible for right-click menus and camera navigation.
+bool contextMenuPending=openViewportContext||openVertexContext;
+bool showCrosshair=inView && !drag.active && !IsMouseButtonDown(MOUSE_BUTTON_RIGHT) &&
+ !contextMenuPending && !ImGui::IsPopupOpen("Viewport Context Menu",ImGuiPopupFlags_AnyPopupLevel) &&
+ !ImGui::IsPopupOpen("Vertex Context Menu",ImGuiPopupFlags_AnyPopupLevel) &&
+ (cursorOnActor || handleHit(GetMousePosition())>=0);
 if(showCrosshair && !crosshairCursorHidden){HideCursor();crosshairCursorHidden=true;}
 else if(!showCrosshair && crosshairCursorHidden){ShowCursor();crosshairCursorHidden=false;}
 if(showCrosshair){
@@ -1687,6 +1692,7 @@ if(showCrosshair){
 }
 rlImGuiBegin();
 if(openViewportContext){
+ if(crosshairCursorHidden){ShowCursor();crosshairCursorHidden=false;}
  ImGui::OpenPopup("Viewport Context Menu");
  openViewportContext=false;
 }
@@ -1705,6 +1711,7 @@ if(ImGui::BeginPopup("Viewport Context Menu")){
  ImGui::EndPopup();
 }
 if(openVertexContext){
+ if(crosshairCursorHidden){ShowCursor();crosshairCursorHidden=false;}
  ImGui::OpenPopup("Vertex Context Menu");
  openVertexContext=false;
 }
