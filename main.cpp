@@ -1915,7 +1915,10 @@ if(showEditPolyPanel&&selected>=0&&selected<(int)objects.size()&&objects[selecte
  ImGui::TextUnformatted("Selection mode");
  const char* names[]={"Object","Vertex","Edge","Border","Polygon"};
  const int subModes[]={0,1,2,4,3};
- for(int i=0;i<5;i++){if(i==3)ImGui::NewLine();else if(i)ImGui::SameLine();if(ImGui::RadioButton(names[i],mode==subModes[i])){if(subModes[i]==0||selected>=0){mode=subModes[i];sub=-1;face=-1;targetWeldArmed=false;rectangleSelected.clear();rectangleObject=-1;}}}
+ for(int i=0;i<5;i++){
+  if(i>0){const float needed=ImGui::CalcTextSize(names[i]).x+ImGui::GetFrameHeight()+ImGui::GetStyle().ItemSpacing.x;if(ImGui::GetContentRegionAvail().x>=needed)ImGui::SameLine();}
+  if(ImGui::RadioButton(names[i],mode==subModes[i])){if(subModes[i]==0||selected>=0){mode=subModes[i];sub=-1;face=-1;targetWeldArmed=false;rectangleSelected.clear();rectangleObject=-1;}}
+ }
  if(selected<0)ImGui::TextDisabled("Select an actor in Object mode before editing sub-objects.");
  ImGui::Separator();
  auto operation=[&](const char* label,bool available,void(*fn)()){
@@ -1993,8 +1996,8 @@ if(ImGui::Begin("Create Objects")){
   ImGui::TextDisabled("This object has no primitive parameters; create a new primitive to edit dimensions.");
  ImGui::TextDisabled(editingPrimitive?"Change values to resize the selected object.":"Set dimensions before creating a primitive.");
  ImGui::TextDisabled("Hover a field or shape for its description.");
- const float propertyFieldWidth=std::min(85.0f,std::max(55.0f,ImGui::GetContentRegionAvail().x*0.35f));
- const float propertyLabelWidth=ImGui::CalcTextSize("Length").x+12.0f;
+ const float propertyLabelWidth=std::min(116.0f,ImGui::GetContentRegionAvail().x*0.52f);
+ const float propertyFieldWidth=std::max(35.0f,ImGui::GetContentRegionAvail().x-propertyLabelWidth-ImGui::GetStyle().ItemSpacing.x-4.0f);
  auto propertyLabel=[&](const char* label){
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
@@ -2053,27 +2056,28 @@ if(ImGui::Begin("Create Objects")){
  const float buttonHeight=32.0f;
  const float buttonGap=8.0f;
  const float availableWidth=ImGui::GetContentRegionAvail().x;
- const float buttonWidth=std::max(1.0f,(availableWidth-2.0f*buttonGap)/3.0f);
+ const bool compactButtons=availableWidth<190.0f;
+ const float buttonWidth=compactButtons?availableWidth:std::max(1.0f,(availableWidth-2.0f*buttonGap)/3.0f);
  if(ImGui::Button("Box",ImVec2(buttonWidth,buttonHeight))){
   checkpoint();MeshObject o=box(createSegX,createSegY,createSegZ);o.primitiveType=1;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;o.segmentsX=createSegX;o.segmentsY=createSegY;o.segmentsZ=createSegZ;o.segmentsHeight=createSegHeight;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a six-faced box using Length, Width and Height.");
- ImGui::SameLine(0,buttonGap);
+ if(!compactButtons)ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Sphere",ImVec2(buttonWidth,buttonHeight))){
   checkpoint();MeshObject o=sphere(createSides,createSegHeight);o.primitiveType=2;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;o.segmentsX=createSegX;o.segmentsY=createSegY;o.segmentsZ=createSegZ;o.segmentsHeight=createSegHeight;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a segmented sphere or ellipsoid using Length, Width and Height.");
- ImGui::SameLine(0,buttonGap);
+ if(!compactButtons)ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){
   checkpoint();MeshObject o=plane(createSegX,createSegY);o.primitiveType=3;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;o.segmentsX=createSegX;o.segmentsY=createSegY;o.segmentsZ=createSegZ;o.segmentsHeight=createSegHeight;
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
- if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a flat XY plane using Length and Width; Height and Sides are ignored.");
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a flat XY plane using Length and Width; Height is ignored.");
  ImGui::Separator();
  ImGui::TextWrapped("Box: Six-sided solid with adjustable dimensions.");
  ImGui::TextWrapped("Sphere: Rounded primitive with adjustable height segments.");
