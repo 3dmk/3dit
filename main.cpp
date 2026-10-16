@@ -2013,10 +2013,6 @@ if(ImGui::Begin("Create Objects")){
  ImGui::DragFloat("##CreateHeight", &createHeight,0.05f,0.01f,10000.0f,"%.2f");
  if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Size along the Z axis. Not used by Plane.");
- propertyLabel("Sides");
- ImGui::DragInt("##CreateSides", &createSides,1,3,128);
- if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
- if(ImGui::IsItemHovered())ImGui::SetTooltip("Sphere circumference segments (3-128). Not used by Box or Plane.");
  ImGui::Separator();
  ImGui::TextUnformatted("Segments");
  const int currentType=editingPrimitive?objects[selected].primitiveType:0;
@@ -2070,7 +2066,7 @@ if(ImGui::Begin("Create Objects")){
   for(auto& v:o.vertices){v.x*=createLength*0.5f;v.y*=createWidth*0.5f;v.z*=createHeight*0.5f;}
   objects.push_back(std::move(o));selected=(int)objects.size()-1;mode=0;face=-1;sub=-1;
  }
- if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a segmented sphere or ellipsoid using dimensions and Sides.");
+ if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a segmented sphere or ellipsoid using Length, Width and Height.");
  ImGui::SameLine(0,buttonGap);
  if(ImGui::Button("Plane",ImVec2(buttonWidth,buttonHeight))){
   checkpoint();MeshObject o=plane(createSegX,createSegY);o.primitiveType=3;o.primitiveLength=createLength;o.primitiveWidth=createWidth;o.primitiveHeight=createHeight;o.primitiveSides=createSides;o.segmentsX=createSegX;o.segmentsY=createSegY;o.segmentsZ=createSegZ;o.segmentsHeight=createSegHeight;
@@ -2080,7 +2076,7 @@ if(ImGui::Begin("Create Objects")){
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a flat XY plane using Length and Width; Height and Sides are ignored.");
  ImGui::Separator();
  ImGui::TextWrapped("Box: Six-sided solid with adjustable dimensions.");
- ImGui::TextWrapped("Sphere: Rounded primitive; Sides controls its resolution.");
+ ImGui::TextWrapped("Sphere: Rounded primitive with adjustable height segments.");
  ImGui::TextWrapped("Plane: Flat surface on XY; Length and Width only.");
 }
 ImGui::End();
