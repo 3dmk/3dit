@@ -2029,10 +2029,6 @@ if(ImGui::Begin("Create Objects")){
   propertyLabel("Z Segments");ImGui::DragInt("##SegZ",&createSegZ,1,1,64);
   if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
  }
- if(currentType==2||currentType==0){
-  propertyLabel("Height Seg.");ImGui::DragInt("##SegHeight",&createSegHeight,1,2,64);
-  if(editingPrimitive&&ImGui::IsItemActivated())checkpoint();
- }
  createSegX=std::clamp(createSegX,1,64);createSegY=std::clamp(createSegY,1,64);
  createSegZ=std::clamp(createSegZ,1,64);createSegHeight=std::clamp(createSegHeight,2,64);
  createLength=std::clamp(createLength,0.01f,10000.0f);
@@ -2080,7 +2076,7 @@ if(ImGui::Begin("Create Objects")){
  if(ImGui::IsItemHovered())ImGui::SetTooltip("Create a flat XY plane using Length and Width; Height is ignored.");
  ImGui::Separator();
  ImGui::TextWrapped("Box: Six-sided solid with adjustable dimensions.");
- ImGui::TextWrapped("Sphere: Rounded primitive with adjustable height segments.");
+ ImGui::TextWrapped("Sphere: Rounded primitive with fixed height segmentation.");
  ImGui::TextWrapped("Plane: Flat surface on XY; Length and Width only.");
 }
 ImGui::End();
