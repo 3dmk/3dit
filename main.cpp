@@ -1996,13 +1996,24 @@ if(ImGui::Begin("Create Objects")){
   ImGui::TextDisabled("This object has no primitive parameters; create a new primitive to edit dimensions.");
  ImGui::TextDisabled(editingPrimitive?"Change values to resize the selected object.":"Set dimensions before creating a primitive.");
  ImGui::TextDisabled("Hover a field or shape for its description.");
- const float propertyLabelWidth=std::min(116.0f,ImGui::GetContentRegionAvail().x*0.52f);
- const float propertyFieldWidth=std::max(35.0f,ImGui::GetContentRegionAvail().x-propertyLabelWidth-ImGui::GetStyle().ItemSpacing.x-4.0f);
+ // Compact, right-aligned numeric editors with a shared column and no oversized drag fields.
+ const float propertyRowWidth=ImGui::GetContentRegionAvail().x;
+ const float propertyGap=ImGui::GetStyle().ItemSpacing.x;
+ const float propertyFieldWidth=std::min(96.0f,std::max(44.0f,propertyRowWidth*0.43f));
+ const float propertyFieldX=std::max(0.0f,propertyRowWidth-propertyFieldWidth);
  auto propertyLabel=[&](const char* label){
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
-  ImGui::SameLine(propertyLabelWidth+ImGui::GetStyle().WindowPadding.x);
-  ImGui::SetNextItemWidth(propertyFieldWidth);
+  const float labelEnd=ImGui::GetItemRectMax().x;
+  const float fieldStart=ImGui::GetWindowPos().x+ImGui::GetStyle().WindowPadding.x+propertyFieldX;
+  if(labelEnd+propertyGap>fieldStart){
+   // Extremely narrow panels stack the input below its label instead of overlapping.
+   ImGui::SetNextItemWidth(std::max(44.0f,propertyRowWidth));
+  }else{
+   ImGui::SameLine();
+   ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x+propertyFieldX);
+   ImGui::SetNextItemWidth(propertyFieldWidth);
+  }
  };
  propertyLabel("Length");
  ImGui::DragFloat("##CreateLength", &createLength,0.05f,0.01f,10000.0f,"%.2f");
