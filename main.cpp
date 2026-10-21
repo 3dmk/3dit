@@ -2701,6 +2701,16 @@ if(materialsPanelOpen){
  ImGui::End();
 }
 if(showSpatiumRender){
+ // Follow the live editor camera. Invalidate progressive accumulation on movement.
+ const auto cameraChanged=[](const Camera3D& a,const Camera3D& b){
+  auto changed=[](Vector3 x,Vector3 y){return Vector3DistanceSqr(x,y)>0.0000001f;};
+  return changed(a.position,b.position)||changed(a.target,b.target)||changed(a.up,b.up)||
+   fabsf(a.fovy-b.fovy)>0.0001f||a.projection!=b.projection;
+ };
+ if(cameraChanged(camera,spatiumCamera)){
+  spatiumCamera=camera;
+  spatiumScanline=0;spatiumFrame=0;
+ }
  ImGui::SetNextWindowSize(ImVec2(720,480),ImGuiCond_FirstUseEver);
  if(ImGui::Begin("Spatium - Realtime GI Render",&showSpatiumRender)){
   ImGui::TextUnformatted("Experimental spatial radiance cascades | CPU reference");
