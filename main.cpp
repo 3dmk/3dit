@@ -1996,23 +1996,22 @@ if(ImGui::Begin("Create Objects")){
   ImGui::TextDisabled("This object has no primitive parameters; create a new primitive to edit dimensions.");
  ImGui::TextDisabled(editingPrimitive?"Change values to resize the selected object.":"Set dimensions before creating a primitive.");
  ImGui::TextDisabled("Hover a field or shape for its description.");
- // Compact, right-aligned numeric editors with a shared column and no oversized drag fields.
+ // Uniform numeric rows: labels left, compact numeric boxes right, no overlapping.
  const float propertyRowWidth=ImGui::GetContentRegionAvail().x;
  const float propertyGap=ImGui::GetStyle().ItemSpacing.x;
- const float propertyFieldWidth=std::min(96.0f,std::max(44.0f,propertyRowWidth*0.43f));
+ const float propertyFieldWidth=std::min(82.0f,std::max(52.0f,propertyRowWidth*0.34f));
  const float propertyFieldX=std::max(0.0f,propertyRowWidth-propertyFieldWidth);
  auto propertyLabel=[&](const char* label){
   ImGui::AlignTextToFramePadding();
   ImGui::TextUnformatted(label);
-  const float labelEnd=ImGui::GetItemRectMax().x;
-  const float fieldStart=ImGui::GetWindowPos().x+ImGui::GetStyle().WindowPadding.x+propertyFieldX;
-  if(labelEnd+propertyGap>fieldStart){
-   // Extremely narrow panels stack the input below its label instead of overlapping.
-   ImGui::SetNextItemWidth(std::max(44.0f,propertyRowWidth));
-  }else{
+  const float labelWidth=ImGui::CalcTextSize(label).x;
+  if(labelWidth+propertyGap+propertyFieldWidth<=propertyRowWidth){
    ImGui::SameLine();
    ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x+propertyFieldX);
    ImGui::SetNextItemWidth(propertyFieldWidth);
+  }else{
+   // Below the label when there is insufficient horizontal space.
+   ImGui::SetNextItemWidth(std::max(40.0f,propertyRowWidth));
   }
  };
  propertyLabel("Length");
