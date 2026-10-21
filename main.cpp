@@ -19,6 +19,50 @@
 void ApplyN3DLiteTitlebarTheme();
 int viewportDisplayMode=0;
 struct MeshObject {std::string name;std::vector<Vector3> vertices;std::vector<std::vector<int>> faces;Vector3 position{};int materialId=0;float objectColor[3]={0.53f,0.53f,0.53f};bool editablePoly=false;int primitiveType=0;float primitiveLength=2.0f,primitiveWidth=2.0f,primitiveHeight=2.0f;int primitiveSides=24;int segmentsX=1,segmentsY=1,segmentsZ=1,segmentsHeight=12;int smoothingGroup=0;float smoothingValues[33]={0};MeshObject(){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;}MeshObject(std::string n,std::vector<Vector3> v,std::vector<std::vector<int>> f):name(std::move(n)),vertices(std::move(v)),faces(std::move(f)){for(int i=1;i<=32;i++)smoothingValues[i]=100.0f;} };
+// Lightweight fixed-step Z-up game physics: dynamic bodies, gravity, ground and AABB contacts.
+struct GameBody {Vector3 velocity{};bool dynamic=false;float restitution=0.2f;};
+static std::vector<GameBody> gameBodies;
+static bool gamePlaying=false;
+static float gameAccumulator=0.0f;
+static Vector3 gameHalfExtents(const MeshObject& o){
+ Vector3 h{0.5f,0.5f,0.5f};
+ if(o.vertices.empty())return h;
+ Vector3 lo=o.vertices.front(),hi=lo;
+ for(const Vector3& v:o.vertices){
+  lo={std::min(lo.x,v.x),std::min(lo.y,v.y),std::min(lo.z,v.z)};
+  hi={std::max(hi.x,v.x),std::max(hi.y,v.y),std::max(hi.z,v.z)};
+ }
+ return Vector3Scale(Vector3Subtract(hi,lo),0.5f);
+}
+static void gamePhysicsStep(std::vector<MeshObject>& scene,float dt){
+ if(gameBodies.size()<scene.size())gameBodies.resize(scene.size());
+ for(size_t i=0;i<scene.size();i++){
+  GameBody& body=gameBodies[i];
+  if(!body.dynamic)continue;
+  body.velocity.z-=9.81f*dt;
+  scene[i].position=Vector3Add(scene[i].position,Vector3Scale(body.velocity,dt));
+  const Vector3 half=gameHalfExtents(scene[i]);
+  if(scene[i].position.z-half.z<0.0f){
+   scene[i].position.z=half.z;
+   if(body.velocity.z<0)body.velocity.z=-body.velocity.z*body.restitution;
+   if(fabsf(body.velocity.z)<0.15f)body.velocity.z=0;
+   body.velocity.x*=0.98f;body.velocity.y*=0.98f;
+  }
+  for(size_t j=0;j<scene.size();j++){
+   if(i==j)continue;
+   const Vector3 other=gameHalfExtents(scene[j]);
+   Vector3 delta=Vector3Subtract(scene[i].position,scene[j].position);
+   const float ox=half.x+other.x-fabsf(delta.x);
+   const float oy=half.y+other.y-fabsf(delta.y);
+   const float oz=half.z+other.z-fabsf(delta.z);
+   if(ox<=0||oy<=0||oz<=0)continue;
+   // Static and dynamic bodies use minimum-penetration AABB separation.
+   if(oz<=ox&&oz<=oy){float sign=delta.z>=0?1.0f:-1.0f;scene[i].position.z+=sign*oz;if(body.velocity.z*sign<0)body.velocity.z=-body.velocity.z*body.restitution;}
+   else if(ox<=oy){float sign=delta.x>=0?1.0f:-1.0f;scene[i].position.x+=sign*ox;if(body.velocity.x*sign<0)body.velocity.x=-body.velocity.x*body.restitution;}
+   else {float sign=delta.y>=0?1.0f:-1.0f;scene[i].position.y+=sign*oy;if(body.velocity.y*sign<0)body.velocity.y=-body.velocity.y*body.restitution;}
+  }
+ }
+}
 struct EditorMaterial {std::string name;float baseColor[3]={0.53f,0.53f,0.53f};float roughness=0.5f;float metallic=0.0f;float specular=0.5f;};
 std::vector<EditorMaterial> materials={{"Default"}};int activeMaterial=0;
 // Live node graph preview state is independent from the ImGui panel lifetime.
@@ -1128,6 +1172,15 @@ Vector2 polygonExtrudePress{};
 int polygonExtrudeFace=-1;
 
 while(!WindowShouldClose()){
+ if(gameBodies.size()<objects.size())gameBodies.resize(objects.size());
+ if(gamePlaying){
+  gameAccumulator=std::min(0.25f,gameAccumulator+GetFrameTime());
+  int steps=0;
+  while(gameAccumulator>=1.0f/60.0f&&steps++<8){
+   gamePhysicsStep(objects,1.0f/60.0f);gameAccumulator-=1.0f/60.0f;
+  }
+ }else gameAccumulator=0.0f;
+
  // Save changes after the window stops moving/resizing; ImGui saves docking
  // positions independently to N3DLite-layout.ini.
  if(!IsWindowMinimized()&&!IsWindowFullscreen()){
@@ -1926,6 +1979,12 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  ImGui::SameLine(0,3);
  displayButton("Wire",2,"Wireframe (polygon edges, no triangulation)");
  ImGui::SameLine(0,18);
+ if(ImGui::Button(gamePlaying?"Stop Game":"Play Game")){
+  gamePlaying=!gamePlaying;
+  gameAccumulator=0.0f;
+  if(!gamePlaying)for(auto& body:gameBodies)body.velocity={};
+ }
+ ImGui::SameLine(0,8);
  if(ImGui::Button("Render")){
   showSpatiumRender=true;spatiumCamera=camera;spatiumScanline=0;spatiumFrame=0;
 
@@ -2745,11 +2804,24 @@ if(showSpatiumRender){
  }
  ImGui::End();
 }
+if(selected>=0&&selected<(int)objects.size()){
+ ImGui::SetNextWindowSize(ImVec2(265,155),ImGuiCond_FirstUseEver);
+ if(ImGui::Begin("Game Physics")){
+  if(gameBodies.size()<objects.size())gameBodies.resize(objects.size());
+  auto& body=gameBodies[selected];
+  ImGui::Text("Actor: %s",objects[selected].name.c_str());
+  ImGui::Checkbox("Dynamic rigid body",&body.dynamic);
+  ImGui::SliderFloat("Bounciness",&body.restitution,0.0f,1.0f);
+  if(ImGui::Button("Reset Velocity"))body.velocity={};
+  ImGui::TextDisabled("Z-up gravity: 9.81 | AABB collision");
+ }
+ ImGui::End();
+}
 // Record only real UI panels, not the pass-through dockspace. This
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Edit Poly","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Spatium - Realtime GI Render","Vertex Context Menu"}){
+for(const char* name:{"Edit Poly","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Spatium - Realtime GI Render","Game Physics","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
