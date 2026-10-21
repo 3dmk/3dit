@@ -1152,6 +1152,8 @@ bool openViewportContext=false;
 int contextObject=-1;
 bool showEditPolyPanel=false;
 bool showSpatiumRender=false;
+float gameYaw=0.0f,gamePitch=0.0f;
+bool gameMouseCaptured=false;
 RenderTexture2D spatiumLiveTarget{};
 const int spatiumWidth=320,spatiumHeight=180;
 std::vector<Color> spatiumPixels(spatiumWidth*spatiumHeight,BLACK);
@@ -1207,11 +1209,44 @@ while(!WindowShouldClose()){
  for(const Rectangle& rect:uiInputRects){
   if(CheckCollisionPointRec(pointer,rect)){inView=false;break;}
  }
+ // Play mode owns the camera and suppresses editor picking and transform shortcuts.
+ if(gamePlaying){
+  inView=false;
+  if(IsKeyPressed(KEY_ESCAPE)){gamePlaying=false;gameAccumulator=0.0f;}
+  if(gamePlaying){
+   if(!gameMouseCaptured){
+    DisableCursor();gameMouseCaptured=true;
+    Vector3 look=Vector3Normalize(Vector3Subtract(camera.target,camera.position));
+    gameYaw=atan2f(look.y,look.x);
+    gamePitch=asinf(std::clamp(look.z,-1.0f,1.0f));
+   }
+   Vector2 mouse=GetMouseDelta();
+   gameYaw-=mouse.x*0.0025f;
+   gamePitch=std::clamp(gamePitch-mouse.y*0.0025f,-1.50f,1.50f);
+   Vector3 forward={cosf(gamePitch)*cosf(gameYaw),cosf(gamePitch)*sinf(gameYaw),sinf(gamePitch)};
+   Vector3 flat={cosf(gameYaw),sinf(gameYaw),0.0f};
+   Vector3 right={-sinf(gameYaw),cosf(gameYaw),0.0f};
+   Vector3 movement{};
+   if(IsKeyDown(KEY_W))movement=Vector3Add(movement,flat);
+   if(IsKeyDown(KEY_S))movement=Vector3Subtract(movement,flat);
+   if(IsKeyDown(KEY_D))movement=Vector3Add(movement,right);
+   if(IsKeyDown(KEY_A))movement=Vector3Subtract(movement,right);
+   if(IsKeyDown(KEY_SPACE))movement.z+=1.0f;
+   if(IsKeyDown(KEY_LEFT_CONTROL))movement.z-=1.0f;
+   if(Vector3LengthSqr(movement)>0.0001f){
+    movement=Vector3Normalize(movement);
+    float speed=IsKeyDown(KEY_LEFT_SHIFT)?12.0f:5.0f;
+    camera.position=Vector3Add(camera.position,Vector3Scale(movement,speed*GetFrameTime()));
+   }
+   camera.target=Vector3Add(camera.position,forward);
+  }
+ }
+ if(!gamePlaying&&gameMouseCaptured){EnableCursor();gameMouseCaptured=false;}
  // Do not query ImGui dock nodes here: rlImGuiBegin() has not yet
  // started this frame. Input is validated by raycast for polygon actions.
  // Dockspace geometry belongs to the later UI/render phase.
  bool typing=ImGui::GetIO().WantTextInput;
- if(!typing){
+ if(!typing&&!gamePlaying){
   // Delete acts on the current selection level. Keep every edit undoable.
   if((IsKeyPressed(KEY_DELETE)||IsKeyPressed(KEY_BACKSPACE))&&
      selected>=0&&selected<(int)objects.size()){
@@ -1981,6 +2016,7 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  ImGui::SameLine(0,18);
  if(ImGui::Button(gamePlaying?"Stop Game":"Play Game")){
   gamePlaying=!gamePlaying;
+  if(!gamePlaying&&gameMouseCaptured){EnableCursor();gameMouseCaptured=false;}
   gameAccumulator=0.0f;
   if(!gamePlaying)for(auto& body:gameBodies)body.velocity={};
  }
@@ -2833,6 +2869,7 @@ EndDrawing();
 }
 saveWindowLayout();
 ImGui::SaveIniSettingsToDisk("N3DLite-layout.ini");
+if(gameMouseCaptured)EnableCursor();
 if(crosshairCursorHidden)ShowCursor();
 if(spatiumLiveTarget.id)UnloadRenderTexture(spatiumLiveTarget);
 for(auto& e:gpuCache)disposeGpu(e);
