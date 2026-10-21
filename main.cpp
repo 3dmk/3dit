@@ -243,6 +243,62 @@ MeshObject sphere(int sides=24,int heightSegments=12){
  }
  return o;
 }
+
+struct SpatiumHit {bool hit=false;float distance=1.0e30f;Vector3 position{},normal{};int object=-1;};
+static SpatiumHit spatiumTrace(const std::vector<MeshObject>& scene,Ray ray,float maxDistance=1.0e29f){
+ SpatiumHit best;best.distance=maxDistance;
+ for(int oi=0;oi<(int)scene.size();++oi){
+  const auto& o=scene[oi];
+  for(const auto& f:o.faces){
+   if(f.size()<3)continue;
+   for(size_t j=1;j+1<f.size();++j){
+    const Vector3 a=Vector3Add(o.vertices[f[0]],o.position),b=Vector3Add(o.vertices[f[j]],o.position),c=Vector3Add(o.vertices[f[j+1]],o.position);
+    RayCollision hit=GetRayCollisionTriangle(ray,a,b,c);
+    if(!hit.hit)hit=GetRayCollisionTriangle(ray,a,c,b);
+    if(hit.hit&&hit.distance>0.001f&&hit.distance<best.distance){
+     best.hit=true;best.distance=hit.distance;best.position=hit.point;best.normal=Vector3Normalize(Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a)));best.object=oi;
+     if(Vector3DotProduct(best.normal,ray.direction)>0)best.normal=Vector3Negate(best.normal);
+    }
+   }
+  }
+ }
+ return best;
+}
+static Vector3 spatiumSky(Vector3 d){float t=std::clamp(d.z*0.5f+0.5f,0.0f,1.0f);return {0.18f+0.32f*t,0.20f+0.38f*t,0.26f+0.50f*t};}
+static Vector3 spatiumColor(const MeshObject& o){
+ return {std::clamp(o.objectColor[0],0.0f,1.0f),std::clamp(o.objectColor[1],0.0f,1.0f),std::clamp(o.objectColor[2],0.0f,1.0f)};
+}
+static Vector3 spatiumRadiance(const std::vector<MeshObject>& scene,Ray ray,int pixelSample){
+ SpatiumHit h=spatiumTrace(scene,ray);
+ if(!h.hit)return spatiumSky(ray.direction);
+ const Vector3 base=spatiumColor(scene[h.object]);
+ const Vector3 sun=Vector3Normalize(Vector3{0.45f,-0.5f,0.75f});
+ Ray shadow{Vector3Add(h.position,Vector3Scale(h.normal,0.003f)),sun};
+ float direct=spatiumTrace(scene,shadow,1000.0f).hit?0.0f:std::max(0.0f,Vector3DotProduct(h.normal,sun));
+ // Spatial radiance-cascade prototype: increasing probe radii and angular coverage.
+ // Secondary rays are evaluated against actual scene triangles (not a screen-space fake).
+ Vector3 indirect{};float weightSum=0.0f;
+ Vector3 tangent=Vector3CrossProduct(h.normal,{0,0,1});
+ if(Vector3Length(tangent)<0.01f)tangent=Vector3CrossProduct(h.normal,{0,1,0});
+ tangent=Vector3Normalize(tangent);
+ Vector3 bitangent=Vector3CrossProduct(h.normal,tangent);
+ const float distances[3]={1.5f,6.0f,24.0f};
+ for(int level=0;level<3;level++){
+  const float phi=2.3999632f*(pixelSample*3+level*7+1);
+  const float r=sqrtf((level+0.5f)/3.0f);
+  Vector3 direction=Vector3Normalize(Vector3Add(Vector3Scale(h.normal,sqrtf(1-r*r)),
+   Vector3Add(Vector3Scale(tangent,r*cosf(phi)),Vector3Scale(bitangent,r*sinf(phi)))));
+  Ray bounce{Vector3Add(h.position,Vector3Scale(h.normal,0.004f)),direction};
+  SpatiumHit second=spatiumTrace(scene,bounce,distances[level]);
+  Vector3 incoming=second.hit?spatiumColor(scene[second.object]):spatiumSky(direction);
+  float factor=second.hit?0.30f:0.75f;
+  indirect=Vector3Add(indirect,Vector3Scale(incoming,factor));
+  weightSum+=1.0f;
+ }
+ indirect=Vector3Scale(indirect,1.0f/std::max(1.0f,weightSum));
+ return {base.x*(0.06f+0.86f*direct+indirect.x*0.60f),base.y*(0.06f+0.86f*direct+indirect.y*0.60f),base.z*(0.06f+0.86f*direct+indirect.z*0.60f)};
+}
+
 Vector3 world(const MeshObject&o,int i){return Vector3Add(o.vertices[i],o.position);}
 void extrude(){if(selected<0||face<0||mode!=3)return;checkpoint();auto&o=objects[selected];auto old=o.faces[face];if(old.size()<3)return;Vector3 a=o.vertices[old[0]],b=o.vertices[old[1]],c=o.vertices[old[2]];Vector3 n=Vector3Normalize(Vector3CrossProduct(Vector3Subtract(b,a),Vector3Subtract(c,a)));std::vector<int> top;for(int i:old){top.push_back((int)o.vertices.size());o.vertices.push_back(Vector3Add(o.vertices[i],Vector3Scale(n,.5f)));}o.faces[face]=top;for(size_t i=0;i<old.size();i++)o.faces.push_back({old[i],old[(i+1)%old.size()],top[(i+1)%top.size()],top[i]});}
 // Interactive polygon extrusion: create side walls at zero height, then move
@@ -1051,6 +1107,12 @@ bool openVertexContext=false;
 bool openViewportContext=false;
 int contextObject=-1;
 bool showEditPolyPanel=false;
+bool showSpatiumRender=false;
+Texture2D spatiumTexture{};
+const int spatiumWidth=320,spatiumHeight=180;
+std::vector<Color> spatiumPixels(spatiumWidth*spatiumHeight,BLACK);
+int spatiumScanline=0,spatiumFrame=0;
+Camera3D spatiumCamera{};
 bool backfaceCulling=false;
 Vector2 rightPressPosition{};
 bool rightPressInView=false;
@@ -1830,6 +1892,14 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  ImGui::SameLine(0,3);
  displayButton("Wire",2,"Wireframe (polygon edges, no triangulation)");
  ImGui::SameLine(0,18);
+ if(ImGui::Button("Render")){
+  showSpatiumRender=true;spatiumCamera=camera;spatiumScanline=0;spatiumFrame=0;
+  if(!spatiumTexture.id){
+   Image image=GenImageColor(spatiumWidth,spatiumHeight,BLACK);
+   spatiumTexture=LoadTextureFromImage(image);UnloadImage(image);
+  }
+ }
+ ImGui::SameLine(0,8);
  if(ImGui::Button("Materials")){
   materialsPanelOpen=!materialsPanelOpen;
   if(materialsPanelOpen)ImGui::SetWindowFocus("Materials");
@@ -2630,11 +2700,48 @@ if(materialsPanelOpen){
  }
  ImGui::End();
 }
+if(showSpatiumRender){
+ ImGui::SetNextWindowSize(ImVec2(720,480),ImGuiCond_FirstUseEver);
+ if(ImGui::Begin("Spatium - Realtime GI Render",&showSpatiumRender)){
+  ImGui::TextUnformatted("Experimental spatial radiance cascades | CPU reference");
+  ImGui::SameLine();
+  if(ImGui::Button("Reset / Sync Camera")){spatiumCamera=camera;spatiumScanline=0;spatiumFrame=0;}
+  if(spatiumTexture.id){
+   // Progressive image update: render a small scanline batch each editor frame.
+   for(int row=0;row<2;row++){
+    int y=spatiumScanline;
+    for(int x=0;x<spatiumWidth;x++){
+     float nx=(2.0f*(x+0.5f)/spatiumWidth-1.0f);
+     float ny=(1.0f-2.0f*(y+0.5f)/spatiumHeight);
+     Vector3 forward=Vector3Normalize(Vector3Subtract(spatiumCamera.target,spatiumCamera.position));
+     Vector3 right=Vector3Normalize(Vector3CrossProduct(forward,spatiumCamera.up));
+     Vector3 up=Vector3Normalize(Vector3CrossProduct(right,forward));
+     float scale=tanf(spatiumCamera.fovy*DEG2RAD*0.5f);
+     Vector3 dir=Vector3Normalize(Vector3Add(forward,Vector3Add(Vector3Scale(right,nx*scale*(float)spatiumWidth/spatiumHeight),Vector3Scale(up,ny*scale))));
+     Vector3 radiance=spatiumRadiance(objects,{spatiumCamera.position,dir},spatiumFrame);
+     auto tone=[](float v){return (unsigned char)(255.0f*powf(std::clamp(v/(1.0f+v),0.0f,1.0f),1.0f/2.2f));};
+     Color sample={tone(radiance.x),tone(radiance.y),tone(radiance.z),255};
+     Color& old=spatiumPixels[y*spatiumWidth+x];
+     if(spatiumFrame==0)old=sample;
+     else {float a=1.0f/std::min(spatiumFrame+1,32);old={(unsigned char)(old.r*(1-a)+sample.r*a),(unsigned char)(old.g*(1-a)+sample.g*a),(unsigned char)(old.b*(1-a)+sample.b*a),255};}
+    }
+    spatiumScanline++;
+    if(spatiumScanline>=spatiumHeight){spatiumScanline=0;spatiumFrame++;}
+   }
+   UpdateTexture(spatiumTexture,spatiumPixels.data());
+   ImVec2 avail=ImGui::GetContentRegionAvail();
+   float width=std::max(1.0f,std::min(avail.x,avail.y*(float)spatiumWidth/spatiumHeight));
+   ImGui::Image((ImTextureID)(intptr_t)spatiumTexture.id,ImVec2(width,width*spatiumHeight/spatiumWidth));
+   ImGui::Text("Progressive pass: %d | %d / %d rows",spatiumFrame,spatiumScanline,spatiumHeight);
+  }
+ }
+ ImGui::End();
+}
 // Record only real UI panels, not the pass-through dockspace. This
 // prevents a click on selection-mode radio buttons from also picking
 // the mesh or starting a transform underneath the panel.
 uiInputRects.clear();
-for(const char* name:{"Edit Poly","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Vertex Context Menu"}){
+for(const char* name:{"Edit Poly","Create Objects","Materials","PBR Shader Graph","##N3DLiteTopToolbar","Spatium - Realtime GI Render","Vertex Context Menu"}){
  ImGuiWindow* win=ImGui::FindWindowByName(name);
  if(win&&win->WasActive&&!win->Hidden){
   const ImRect r=win->Rect();
@@ -2647,6 +2754,7 @@ EndDrawing();
 saveWindowLayout();
 ImGui::SaveIniSettingsToDisk("N3DLite-layout.ini");
 if(crosshairCursorHidden)ShowCursor();
+if(spatiumTexture.id)UnloadTexture(spatiumTexture);
 for(auto& e:gpuCache)disposeGpu(e);
 if(smoothShaderReady)UnloadShader(smoothShader);
 rlImGuiShutdown();
