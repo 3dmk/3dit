@@ -1108,7 +1108,7 @@ bool openViewportContext=false;
 int contextObject=-1;
 bool showEditPolyPanel=false;
 bool showSpatiumRender=false;
-Texture2D spatiumTexture{};
+RenderTexture2D spatiumLiveTarget{};
 const int spatiumWidth=320,spatiumHeight=180;
 std::vector<Color> spatiumPixels(spatiumWidth*spatiumHeight,BLACK);
 int spatiumScanline=0,spatiumFrame=0;
@@ -1645,6 +1645,40 @@ if(selected>=0&&selected<(int)objects.size()){
 rlDrawRenderBatchActive();
 rlEnableDepthTest();
 EndMode3D();
+if(showSpatiumRender){
+ // GPU renders a complete new frame every editor tick, rather than CPU scanlines.
+ if(!spatiumLiveTarget.id)spatiumLiveTarget=LoadRenderTexture(spatiumWidth,spatiumHeight);
+ if(spatiumLiveTarget.id){
+  BeginTextureMode(spatiumLiveTarget);
+  ClearBackground({31,35,42,255});
+  BeginMode3D(camera);
+  rlEnableDepthTest();
+  for(size_t oi=0;oi<objects.size()&&oi<gpuCache.size();oi++){
+   const auto& o=objects[oi];const auto& entry=gpuCache[oi];
+   if(!entry.uploaded)continue;
+   static Material liveMaterial=LoadMaterialDefault();
+   Material mat=liveMaterial;
+   if(smoothShaderReady){
+    mat.shader=smoothShader;
+    const auto& pbr=materials[std::clamp(o.materialId,0,(int)materials.size()-1)];
+    SetShaderValue(smoothShader,locBase,o.materialId>0?pbr.baseColor:o.objectColor,SHADER_UNIFORM_VEC3);
+    SetShaderValue(smoothShader,locRough,&pbr.roughness,SHADER_UNIFORM_FLOAT);
+    SetShaderValue(smoothShader,locMetal,&pbr.metallic,SHADER_UNIFORM_FLOAT);
+    SetShaderValue(smoothShader,locSpec,&pbr.specular,SHADER_UNIFORM_FLOAT);
+    float eye[3]={camera.position.x,camera.position.y,camera.position.z};
+    SetShaderValue(smoothShader,locCamera,eye,SHADER_UNIFORM_VEC3);
+   }
+   if(o.materialId<=0)mat.maps[MATERIAL_MAP_DIFFUSE].color={
+    (unsigned char)(std::clamp(o.objectColor[0],0.0f,1.0f)*255),
+    (unsigned char)(std::clamp(o.objectColor[1],0.0f,1.0f)*255),
+    (unsigned char)(std::clamp(o.objectColor[2],0.0f,1.0f)*255),255};
+   DrawMesh(entry.mesh,mat,MatrixTranslate(o.position.x,o.position.y,o.position.z));
+  }
+  EndMode3D();
+  EndTextureMode();
+ }
+}
+
 // Cut/slice guide line in screen coordinates.
 if((cutMode||sliceMode)&&cutLineStarted){
  DrawLineEx(cutLineStart,cutLineEnd,2.0f,ORANGE);
@@ -1894,10 +1928,7 @@ if(ImGui::Begin("##N3DLiteTopToolbar",nullptr,toolbarFlags)){
  ImGui::SameLine(0,18);
  if(ImGui::Button("Render")){
   showSpatiumRender=true;spatiumCamera=camera;spatiumScanline=0;spatiumFrame=0;
-  if(!spatiumTexture.id){
-   Image image=GenImageColor(spatiumWidth,spatiumHeight,BLACK);
-   spatiumTexture=LoadTextureFromImage(image);UnloadImage(image);
-  }
+
  }
  ImGui::SameLine(0,8);
  if(ImGui::Button("Materials")){
@@ -2701,48 +2732,15 @@ if(materialsPanelOpen){
  ImGui::End();
 }
 if(showSpatiumRender){
- // Follow the live editor camera. Invalidate progressive accumulation on movement.
- const auto cameraChanged=[](const Camera3D& a,const Camera3D& b){
-  auto changed=[](Vector3 x,Vector3 y){return Vector3DistanceSqr(x,y)>0.0000001f;};
-  return changed(a.position,b.position)||changed(a.target,b.target)||changed(a.up,b.up)||
-   fabsf(a.fovy-b.fovy)>0.0001f||a.projection!=b.projection;
- };
- if(cameraChanged(camera,spatiumCamera)){
-  spatiumCamera=camera;
-  spatiumScanline=0;spatiumFrame=0;
- }
  ImGui::SetNextWindowSize(ImVec2(720,480),ImGuiCond_FirstUseEver);
  if(ImGui::Begin("Spatium - Realtime GI Render",&showSpatiumRender)){
-  ImGui::TextUnformatted("Experimental spatial radiance cascades | CPU reference");
-  ImGui::SameLine();
-  if(ImGui::Button("Reset / Sync Camera")){spatiumCamera=camera;spatiumScanline=0;spatiumFrame=0;}
-  if(spatiumTexture.id){
-   // Progressive image update: render a small scanline batch each editor frame.
-   for(int row=0;row<2;row++){
-    int y=spatiumScanline;
-    for(int x=0;x<spatiumWidth;x++){
-     float nx=(2.0f*(x+0.5f)/spatiumWidth-1.0f);
-     float ny=(1.0f-2.0f*(y+0.5f)/spatiumHeight);
-     Vector3 forward=Vector3Normalize(Vector3Subtract(spatiumCamera.target,spatiumCamera.position));
-     Vector3 right=Vector3Normalize(Vector3CrossProduct(forward,spatiumCamera.up));
-     Vector3 up=Vector3Normalize(Vector3CrossProduct(right,forward));
-     float scale=tanf(spatiumCamera.fovy*DEG2RAD*0.5f);
-     Vector3 dir=Vector3Normalize(Vector3Add(forward,Vector3Add(Vector3Scale(right,nx*scale*(float)spatiumWidth/spatiumHeight),Vector3Scale(up,ny*scale))));
-     Vector3 radiance=spatiumRadiance(objects,{spatiumCamera.position,dir},spatiumFrame);
-     auto tone=[](float v){return (unsigned char)(255.0f*powf(std::clamp(v/(1.0f+v),0.0f,1.0f),1.0f/2.2f));};
-     Color sample={tone(radiance.x),tone(radiance.y),tone(radiance.z),255};
-     Color& old=spatiumPixels[y*spatiumWidth+x];
-     if(spatiumFrame==0)old=sample;
-     else {float a=1.0f/std::min(spatiumFrame+1,32);old={(unsigned char)(old.r*(1-a)+sample.r*a),(unsigned char)(old.g*(1-a)+sample.g*a),(unsigned char)(old.b*(1-a)+sample.b*a),255};}
-    }
-    spatiumScanline++;
-    if(spatiumScanline>=spatiumHeight){spatiumScanline=0;spatiumFrame++;}
-   }
-   UpdateTexture(spatiumTexture,spatiumPixels.data());
-   ImVec2 avail=ImGui::GetContentRegionAvail();
-   float width=std::max(1.0f,std::min(avail.x,avail.y*(float)spatiumWidth/spatiumHeight));
-   ImGui::Image((ImTextureID)(intptr_t)spatiumTexture.id,ImVec2(width,width*spatiumHeight/spatiumWidth));
-   ImGui::Text("Progressive pass: %d | %d / %d rows",spatiumFrame,spatiumScanline,spatiumHeight);
+  ImGui::TextUnformatted("Live GPU viewport | realtime camera and scene");
+  if(spatiumLiveTarget.id){
+   ImVec2 available=ImGui::GetContentRegionAvail();
+   const float aspect=(float)spatiumWidth/spatiumHeight;
+   const float width=std::max(1.0f,std::min(available.x,available.y*aspect));
+   const float height=width/aspect;
+   ImGui::Image((ImTextureID)(intptr_t)spatiumLiveTarget.texture.id,ImVec2(width,height),ImVec2(0,1),ImVec2(1,0));
   }
  }
  ImGui::End();
@@ -2764,7 +2762,7 @@ EndDrawing();
 saveWindowLayout();
 ImGui::SaveIniSettingsToDisk("N3DLite-layout.ini");
 if(crosshairCursorHidden)ShowCursor();
-if(spatiumTexture.id)UnloadTexture(spatiumTexture);
+if(spatiumLiveTarget.id)UnloadRenderTexture(spatiumLiveTarget);
 for(auto& e:gpuCache)disposeGpu(e);
 if(smoothShaderReady)UnloadShader(smoothShader);
 rlImGuiShutdown();
